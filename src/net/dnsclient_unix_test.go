@@ -260,23 +260,6 @@ func (conf *resolvConfTest) writeAndUpdate(lines []string) error {
 	return nil
 }
 
-/*
-func (conf *resolvConfTest) forceUpdate(name string, lastChecked time.Time) error {
-	dnsConf := dnsReadConfig(name)
-	conf.mu.Lock()
-	conf.dnsConfig = dnsConf
-	conf.mu.Unlock()
-	for i := 0; i < 5; i++ {
-		if conf.tryAcquireSema() {
-			conf.lastChecked = lastChecked
-			conf.releaseSema()
-			return nil
-		}
-	}
-	return fmt.Errorf("tryAcquireSema for %s failed", name)
-}
-*/
-
 func (conf *resolvConfTest) teardown() error {
 	if !systemResolv.ChangeFile(resolvConfPath, time.Now()) {
 		return fmt.Errorf("failed to change hosts file to: %v", conf.path)
