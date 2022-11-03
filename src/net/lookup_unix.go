@@ -112,19 +112,19 @@ func (r *Resolver) lookupCNAME(ctx context.Context, name string) (string, error)
 }
 
 func (r *Resolver) lookupSRV(ctx context.Context, service, proto, name string) (string, []*SRV, error) {
-	return r.goLookupSRV(ctx, service, proto, name, systemConf().resolv)
+	return r.goLookupSRV(ctx, service, proto, name, getSystemResolvConfig())
 }
 
 func (r *Resolver) lookupMX(ctx context.Context, name string) ([]*MX, error) {
-	return r.goLookupMX(ctx, name, systemConf().resolv)
+	return r.goLookupMX(ctx, name, getSystemResolvConfig())
 }
 
 func (r *Resolver) lookupNS(ctx context.Context, name string) ([]*NS, error) {
-	return r.goLookupNS(ctx, name, systemConf().resolv)
+	return r.goLookupNS(ctx, name, getSystemResolvConfig())
 }
 
 func (r *Resolver) lookupTXT(ctx context.Context, name string) ([]string, error) {
-	return r.goLookupTXT(ctx, name, systemConf().resolv)
+	return r.goLookupTXT(ctx, name, getSystemResolvConfig())
 }
 
 func (r *Resolver) lookupAddr(ctx context.Context, addr string) ([]string, error) {

@@ -458,7 +458,7 @@ func (o hostLookupOrder) String() string {
 // depending on our lookup code, so that Go and C get the same
 // answers.
 func (r *Resolver) goLookupHost(ctx context.Context, name string) (addrs []string, err error) {
-	return r.goLookupHostOrder(ctx, name, hostLookupFilesDNS, systemConf().resolv)
+	return r.goLookupHostOrder(ctx, name, hostLookupFilesDNS, getSystemResolvConfig())
 }
 
 func (r *Resolver) goLookupHostOrder(ctx context.Context, name string, order hostLookupOrder, conf *dnsConfig) (addrs []string, err error) {
