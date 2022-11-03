@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	nsswitchConfPath = "/etc/resolv.conf"
+	nsswitchConfPath = "/etc/nsswitch.conf"
 )
 
 var systemNSS = rechecker.Rechecker[nssConf]{
@@ -76,17 +76,6 @@ func (c nssCriterion) standardStatusAction(last bool) bool {
 	}
 	return c.action == def
 }
-
-/*
-func parseNSSConfFile(file string) *nssConf {
-	f, err := os.Open(file)
-	if err != nil {
-		return &nssConf{err: err}
-	}
-	defer f.Close()
-	return parseNSSConf(f)
-}
-*/
 
 func parseNSSConf(data []byte) (*nssConf, error) {
 	conf := new(nssConf)

@@ -64,7 +64,6 @@ func (r *Resolver) lookupHost(ctx context.Context, host string) (addrs []string,
 		order = hostLookupFilesDNS
 	}
 
-	// TODO: here we should pass an auto-updated systemConf().resolv
 	return r.goLookupHostOrder(ctx, host, order, conf.resolv)
 }
 
