@@ -310,12 +310,6 @@ func TestDNSNameLength(t *testing.T) {
 		unsuffixable := "a." + longName[1:]
 		unsuffixableResults := conf.nameList(unsuffixable)
 		if len(unsuffixableResults) != 1 {
-			/*
-				if len(unsuffixableResults) == 0 {
-					t.Errorf("suffixed names []; want []")
-					continue
-				}
-			*/
 			t.Errorf("suffixed names %v; want []", unsuffixableResults[1:])
 		}
 
