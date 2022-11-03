@@ -10,40 +10,55 @@ package net
 
 import (
 	"internal/bytealg"
+	"net/internal/rechecker"
 	"time"
 )
 
+const (
+	resolvConfPath = "/etc/resolv.conf"
+)
+
+func getSystemResolvConfig() *dnsConfig {
+	// We never fail.
+	conf, _ := systemResolv.Get()
+	return conf
+}
+
+var systemResolv = rechecker.Rechecker[dnsConfig]{
+	File:     resolvConfPath,
+	Duration: 5 * time.Second,
+	Parse: func(data []byte) (*dnsConfig, error) {
+		return parseDNSConfig(data), nil
+	},
+	FileErrorHandler: func(err error) (*dnsConfig, error) {
+		var cnf = &dnsConfig{
+			ndots:    1,
+			timeout:  5 * time.Second,
+			attempts: 2,
+			servers:  defaultNS,
+			search:   dnsDefaultSearch(),
+			err:      err, // FIX: we need it??
+		}
+		return cnf, nil
+	},
+}
+
 // See resolv.conf(5) on a Linux machine.
-func dnsReadConfig(filename string) *dnsConfig {
+func parseDNSConfig(file []byte) *dnsConfig {
 	conf := &dnsConfig{
 		ndots:    1,
 		timeout:  5 * time.Second,
 		attempts: 2,
 	}
-	file, err := open(filename)
-	if err != nil {
-		conf.servers = defaultNS
-		conf.search = dnsDefaultSearch()
-		conf.err = err
-		return conf
-	}
-	defer file.close()
-	if fi, err := file.file.Stat(); err == nil {
-		conf.mtime = fi.ModTime()
-	} else {
-		conf.servers = defaultNS
-		conf.search = dnsDefaultSearch()
-		conf.err = err
-		return conf
-	}
-	for line, ok := file.readLine(); ok; line, ok = file.readLine() {
+
+	foreachLine(file, func(line []byte) error {
 		if len(line) > 0 && (line[0] == ';' || line[0] == '#') {
 			// comment.
-			continue
+			return nil
 		}
-		f := getFields(line)
+		f := getFields(string(line))
 		if len(f) < 1 {
-			continue
+			return nil
 		}
 		switch f[0] {
 		case "nameserver": // add one name server
@@ -132,13 +147,17 @@ func dnsReadConfig(filename string) *dnsConfig {
 		default:
 			conf.unknownOpt = true
 		}
-	}
+
+		return nil
+	})
+
 	if len(conf.servers) == 0 {
 		conf.servers = defaultNS
 	}
 	if len(conf.search) == 0 {
 		conf.search = dnsDefaultSearch()
 	}
+
 	return conf
 }
 

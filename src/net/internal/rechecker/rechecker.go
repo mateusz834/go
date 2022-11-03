@@ -19,9 +19,10 @@ type value[T any] struct {
 }
 
 type Rechecker[T any] struct {
-	File     string
-	Parse    func(content []byte) (*T, error)
-	Duration time.Duration
+	File             string
+	Parse            func(content []byte) (*T, error)
+	FileErrorHandler func(err error) (*T, error)
+	Duration         time.Duration
 
 	val         atomic.Pointer[value[T]]
 	once        sync.Once
@@ -56,9 +57,10 @@ func (r *Rechecker[T]) Get() (*T, error) {
 
 			stat, err := os.Stat(r.File)
 			if err != nil {
-				val = &value[T]{err: err}
+				newVal, err := r.fileErrHandle(err)
+				val = &value[T]{v: newVal, err: err}
 				r.val.Store(val)
-				return nil, err
+				return newVal, err
 			}
 
 			if !stat.ModTime().Equal(r.modTime) {
@@ -74,15 +76,22 @@ func (r *Rechecker[T]) Get() (*T, error) {
 	return val.v, val.err
 }
 
+func (r *Rechecker[T]) fileErrHandle(inErr error) (val *T, err error) {
+	if r.FileErrorHandler == nil {
+		return nil, inErr
+	}
+	return r.FileErrorHandler(inErr)
+}
+
 func (r *Rechecker[T]) recheckParse() (val *T, err error) {
 	f, err := os.OpenFile(r.File, os.O_RDONLY, 0)
 	if err != nil {
-		return nil, err
+		return r.fileErrHandle(err)
 	}
 
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return nil, err
+		return r.fileErrHandle(err)
 	}
 
 	return r.Parse(data)
@@ -91,17 +100,20 @@ func (r *Rechecker[T]) recheckParse() (val *T, err error) {
 func (r *Rechecker[T]) initialFileParse() (val *T, modTime time.Time, err error) {
 	f, err := os.OpenFile(r.File, os.O_RDONLY, 0)
 	if err != nil {
-		return nil, time.Time{}, err
+		val, err = r.fileErrHandle(err)
+		return val, time.Time{}, err
 	}
 
 	stat, err := f.Stat()
 	if err != nil {
-		return nil, time.Time{}, err
+		val, err = r.fileErrHandle(err)
+		return val, time.Time{}, err
 	}
 
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return nil, time.Time{}, err
+		val, err = r.fileErrHandle(err)
+		return val, time.Time{}, err
 	}
 
 	val, err = r.Parse(data)
@@ -109,7 +121,7 @@ func (r *Rechecker[T]) initialFileParse() (val *T, modTime time.Time, err error)
 }
 
 // ChangeFile should be used ONLY inside tests.
-func (r *Rechecker[T]) ChangeFile(file string) bool {
+func (r *Rechecker[T]) ChangeFile(file string, lastChecked time.Time) bool {
 	r.Get() // call Get(), so that the r.once is compleated.
 
 	for i := 0; i < 10; i++ {
@@ -118,7 +130,7 @@ func (r *Rechecker[T]) ChangeFile(file string) bool {
 			r.File = file
 			val := &value[T]{}
 			val.v, r.modTime, val.err = r.initialFileParse()
-			r.lastCheched = time.Now()
+			r.lastCheched = lastChecked
 			r.val.Store(val)
 			return true
 		}

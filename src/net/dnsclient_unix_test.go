@@ -230,7 +230,6 @@ func TestLookupTorOnion(t *testing.T) {
 type resolvConfTest struct {
 	dir  string
 	path string
-	*resolverConfig
 }
 
 func newResolvConfTest() (*resolvConfTest, error) {
@@ -239,11 +238,9 @@ func newResolvConfTest() (*resolvConfTest, error) {
 		return nil, err
 	}
 	conf := &resolvConfTest{
-		dir:            dir,
-		path:           path.Join(dir, "resolv.conf"),
-		resolverConfig: &resolvConf,
+		dir:  dir,
+		path: path.Join(dir, "resolv.conf"),
 	}
-	conf.initOnce.Do(conf.init)
 	return conf, nil
 }
 
@@ -257,12 +254,13 @@ func (conf *resolvConfTest) writeAndUpdate(lines []string) error {
 		return err
 	}
 	f.Close()
-	if err := conf.forceUpdate(conf.path, time.Now().Add(time.Hour)); err != nil {
-		return err
+	if !systemResolv.ChangeFile(conf.path, time.Now().Add(-time.Hour)) {
+		return fmt.Errorf("failed to change hosts file to: %v", conf.path)
 	}
 	return nil
 }
 
+/*
 func (conf *resolvConfTest) forceUpdate(name string, lastChecked time.Time) error {
 	dnsConf := dnsReadConfig(name)
 	conf.mu.Lock()
@@ -277,18 +275,13 @@ func (conf *resolvConfTest) forceUpdate(name string, lastChecked time.Time) erro
 	}
 	return fmt.Errorf("tryAcquireSema for %s failed", name)
 }
-
-func (conf *resolvConfTest) servers() []string {
-	conf.mu.RLock()
-	servers := conf.dnsConfig.servers
-	conf.mu.RUnlock()
-	return servers
-}
+*/
 
 func (conf *resolvConfTest) teardown() error {
-	err := conf.forceUpdate("/etc/resolv.conf", time.Time{})
-	os.RemoveAll(conf.dir)
-	return err
+	if !systemResolv.ChangeFile(resolvConfPath, time.Now()) {
+		return fmt.Errorf("failed to change hosts file to: %v", conf.path)
+	}
+	return os.RemoveAll(conf.dir)
 }
 
 var updateResolvConfTests = []struct {
@@ -349,7 +342,7 @@ func TestUpdateResolvConf(t *testing.T) {
 			}
 			wg.Wait()
 		}
-		servers := conf.servers()
+		servers := getSystemResolvConfig().servers
 		if !reflect.DeepEqual(servers, tt.servers) {
 			t.Errorf("#%d: got %v; want %v", i, servers, tt.servers)
 			continue
@@ -600,14 +593,14 @@ func TestGoLookupIPOrderFallbackToFile(t *testing.T) {
 		name := fmt.Sprintf("order %v", order)
 
 		// First ensure that we get an error when contacting a non-existent host.
-		_, _, err := r.goLookupIPCNAMEOrder(context.Background(), "ip", "notarealhost", order)
+		_, _, err := r.goLookupIPCNAMEOrder(context.Background(), "ip", "notarealhost", order, getSystemResolvConfig())
 		if err == nil {
 			t.Errorf("%s: expected error while looking up name not in hosts file", name)
 			continue
 		}
 
 		// Now check that we get an address when the name appears in the hosts file.
-		addrs, _, err := r.goLookupIPCNAMEOrder(context.Background(), "ip", "thor", order) // entry is in "testdata/hosts"
+		addrs, _, err := r.goLookupIPCNAMEOrder(context.Background(), "ip", "thor", order, getSystemResolvConfig()) // entry is in "testdata/hosts"
 		if err != nil {
 			t.Errorf("%s: expected to successfully lookup host entry", name)
 			continue
@@ -1380,7 +1373,7 @@ func TestStrictErrorsLookupTXT(t *testing.T) {
 
 	for _, strict := range []bool{true, false} {
 		r := Resolver{StrictErrors: strict, Dial: fake.DialContext}
-		p, _, err := r.lookup(context.Background(), name, dnsmessage.TypeTXT)
+		p, _, err := r.lookup(context.Background(), name, dnsmessage.TypeTXT, getSystemResolvConfig())
 		var wantErr error
 		var wantRRs int
 		if strict {
@@ -1431,9 +1424,7 @@ func TestDNSGoroutineRace(t *testing.T) {
 func lookupWithFake(fake fakeDNSServer, name string, typ dnsmessage.Type) error {
 	r := Resolver{PreferGo: true, Dial: fake.DialContext}
 
-	resolvConf.mu.RLock()
-	conf := resolvConf.dnsConfig
-	resolvConf.mu.RUnlock()
+	conf := getSystemResolvConfig()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

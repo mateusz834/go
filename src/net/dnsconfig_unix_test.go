@@ -8,8 +8,7 @@ package net
 
 import (
 	"errors"
-	"io/fs"
-	"os"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -170,18 +169,31 @@ var dnsReadConfigTests = []struct {
 	},
 }
 
+func readConfigFile(file string) (*dnsConfig, error) {
+	if !systemResolv.ChangeFile(file, time.Now()) {
+		return nil, fmt.Errorf("failed to change resolv file to: %v", file)
+	}
+	conf := getSystemResolvConfig()
+	if !systemResolv.ChangeFile(resolvConfPath, time.Now()) {
+		return nil, fmt.Errorf("failed to change resolv file to: %v", resolvConfPath)
+	}
+	return conf, nil
+}
+
 func TestDNSReadConfig(t *testing.T) {
 	origGetHostname := getHostname
 	defer func() { getHostname = origGetHostname }()
+
 	getHostname = func() (string, error) { return "host.domain.local", nil }
 
 	for _, tt := range dnsReadConfigTests {
 		if len(tt.want.search) == 0 {
 			tt.want.search = append(tt.want.search, dnsDefaultSearch()...)
 		}
-		conf := dnsReadConfig(tt.name)
-		if conf.err != nil {
-			t.Fatal(conf.err)
+		conf, err := readConfigFile(tt.name)
+		if err != nil {
+			t.Error(err)
+			continue
 		}
 		conf.mtime = time.Time{}
 		if !reflect.DeepEqual(conf, tt.want) {
@@ -193,13 +205,15 @@ func TestDNSReadConfig(t *testing.T) {
 func TestDNSReadMissingFile(t *testing.T) {
 	origGetHostname := getHostname
 	defer func() { getHostname = origGetHostname }()
+
 	getHostname = func() (string, error) { return "host.domain.local", nil }
 
-	conf := dnsReadConfig("a-nonexistent-file")
-	if !os.IsNotExist(conf.err) {
-		t.Errorf("missing resolv.conf:\ngot: %v\nwant: %v", conf.err, fs.ErrNotExist)
+	conf, err := readConfigFile("a-nonexistent-file")
+	if err != nil {
+		t.Fatal(err)
 	}
 	conf.err = nil
+
 	want := &dnsConfig{
 		servers:  defaultNS,
 		ndots:    1,
@@ -258,6 +272,7 @@ func TestDNSDefaultSearch(t *testing.T) {
 func TestDNSNameLength(t *testing.T) {
 	origGetHostname := getHostname
 	defer func() { getHostname = origGetHostname }()
+
 	getHostname = func() (string, error) { return "host.domain.local", nil }
 
 	var char63 = ""
@@ -267,9 +282,9 @@ func TestDNSNameLength(t *testing.T) {
 	longDomain := strings.Repeat(char63+".", 5) + "example"
 
 	for _, tt := range dnsReadConfigTests {
-		conf := dnsReadConfig(tt.name)
-		if conf.err != nil {
-			t.Fatal(conf.err)
+		conf, err := readConfigFile(tt.name)
+		if err != nil {
+			t.Fatal(err)
 		}
 
 		var shortestSuffix int
@@ -295,6 +310,12 @@ func TestDNSNameLength(t *testing.T) {
 		unsuffixable := "a." + longName[1:]
 		unsuffixableResults := conf.nameList(unsuffixable)
 		if len(unsuffixableResults) != 1 {
+			/*
+				if len(unsuffixableResults) == 0 {
+					t.Errorf("suffixed names []; want []")
+					continue
+				}
+			*/
 			t.Errorf("suffixed names %v; want []", unsuffixableResults[1:])
 		}
 

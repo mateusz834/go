@@ -13,7 +13,18 @@ import (
 	"runtime"
 	"sync"
 	"syscall"
+	"time"
+
+	"net/internal/rechecker"
 )
+
+var systemNSS = rechecker.Rechecker[nssConf]{
+	File:     "/etc/nsswitch.conf",
+	Duration: 5 * time.Second,
+	Parse: func(data []byte) (*nssConf, error) {
+		return &nssConf{}, nil
+	},
+}
 
 // conf represents a system's network configuration.
 type conf struct {
@@ -30,6 +41,7 @@ type conf struct {
 	dnsDebugLevel int
 
 	nss    *nssConf
+	nssErr error
 	resolv *dnsConfig
 }
 
@@ -41,7 +53,12 @@ var (
 // systemConf returns the machine's network configuration.
 func systemConf() *conf {
 	confOnce.Do(initConfVal)
-	return confVal
+	dConf := *confVal
+	if runtime.GOOS != "openbsd" {
+		dConf.nss, dConf.nssErr = systemNSS.Get()
+	}
+	dConf.resolv = getSystemResolvConfig()
+	return &dConf
 }
 
 func initConfVal() {
@@ -112,19 +129,23 @@ func initConfVal() {
 		return
 	}
 
-	if runtime.GOOS != "openbsd" {
-		confVal.nss = parseNSSConfFile("/etc/nsswitch.conf")
-	}
+	/*
+		if runtime.GOOS != "openbsd" {
+			confVal.nss = parseNSSConfFile("/etc/nsswitch.conf")
+		}
+	*/
 
-	confVal.resolv = dnsReadConfig("/etc/resolv.conf")
-	if confVal.resolv.err != nil && !os.IsNotExist(confVal.resolv.err) &&
-		!os.IsPermission(confVal.resolv.err) {
-		// If we can't read the resolv.conf file, assume it
-		// had something important in it and defer to cgo.
-		// libc's resolver might then fail too, but at least
-		// it wasn't our fault.
-		confVal.forceCgoLookupHost = true
-	}
+	/*
+		confVal.resolv = dnsReadConfig("/etc/resolv.conf")
+		if confVal.resolv.err != nil && !os.IsNotExist(confVal.resolv.err) &&
+			!os.IsPermission(confVal.resolv.err) {
+			// If we can't read the resolv.conf file, assume it
+			// had something important in it and defer to cgo.
+			// libc's resolver might then fail too, but at least
+			// it wasn't our fault.
+			confVal.forceCgoLookupHost = true
+		}
+	*/
 
 	if _, err := os.Stat("/etc/mdns.allow"); err == nil {
 		confVal.hasMDNSAllow = true

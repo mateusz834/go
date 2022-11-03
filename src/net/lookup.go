@@ -705,13 +705,13 @@ func (r *Resolver) dial(ctx context.Context, network, server string) (Conn, erro
 // is also returned on success.
 //
 // The records are sorted by weight.
-func (r *Resolver) goLookupSRV(ctx context.Context, service, proto, name string) (target string, srvs []*SRV, err error) {
+func (r *Resolver) goLookupSRV(ctx context.Context, service, proto, name string, conf *dnsConfig) (target string, srvs []*SRV, err error) {
 	if service == "" && proto == "" {
 		target = name
 	} else {
 		target = "_" + service + "._" + proto + "." + name
 	}
-	p, server, err := r.lookup(ctx, target, dnsmessage.TypeSRV)
+	p, server, err := r.lookup(ctx, target, dnsmessage.TypeSRV, conf)
 	if err != nil {
 		return "", nil, err
 	}
@@ -756,8 +756,8 @@ func (r *Resolver) goLookupSRV(ctx context.Context, service, proto, name string)
 }
 
 // goLookupMX returns the MX records for name.
-func (r *Resolver) goLookupMX(ctx context.Context, name string) ([]*MX, error) {
-	p, server, err := r.lookup(ctx, name, dnsmessage.TypeMX)
+func (r *Resolver) goLookupMX(ctx context.Context, name string, conf *dnsConfig) ([]*MX, error) {
+	p, server, err := r.lookup(ctx, name, dnsmessage.TypeMX, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -800,8 +800,8 @@ func (r *Resolver) goLookupMX(ctx context.Context, name string) ([]*MX, error) {
 }
 
 // goLookupNS returns the NS records for name.
-func (r *Resolver) goLookupNS(ctx context.Context, name string) ([]*NS, error) {
-	p, server, err := r.lookup(ctx, name, dnsmessage.TypeNS)
+func (r *Resolver) goLookupNS(ctx context.Context, name string, conf *dnsConfig) ([]*NS, error) {
+	p, server, err := r.lookup(ctx, name, dnsmessage.TypeNS, conf)
 	if err != nil {
 		return nil, err
 	}
@@ -842,8 +842,8 @@ func (r *Resolver) goLookupNS(ctx context.Context, name string) ([]*NS, error) {
 }
 
 // goLookupTXT returns the TXT records from name.
-func (r *Resolver) goLookupTXT(ctx context.Context, name string) ([]string, error) {
-	p, server, err := r.lookup(ctx, name, dnsmessage.TypeTXT)
+func (r *Resolver) goLookupTXT(ctx context.Context, name string, conf *dnsConfig) ([]string, error) {
+	p, server, err := r.lookup(ctx, name, dnsmessage.TypeTXT, conf)
 	if err != nil {
 		return nil, err
 	}

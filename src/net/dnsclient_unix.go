@@ -19,9 +19,6 @@ import (
 	"errors"
 	"internal/itoa"
 	"io"
-	"os"
-	"runtime"
-	"sync"
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -333,6 +330,7 @@ func (r *Resolver) tryOneName(ctx context.Context, cfg *dnsConfig, name string, 
 	return dnsmessage.Parser{}, "", lastErr
 }
 
+/*
 // A resolverConfig represents a DNS stub resolver configuration.
 type resolverConfig struct {
 	initOnce sync.Once // guards init of resolverConfig
@@ -416,8 +414,9 @@ func (conf *resolverConfig) tryAcquireSema() bool {
 func (conf *resolverConfig) releaseSema() {
 	<-conf.ch
 }
+*/
 
-func (r *Resolver) lookup(ctx context.Context, name string, qtype dnsmessage.Type) (dnsmessage.Parser, string, error) {
+func (r *Resolver) lookup(ctx context.Context, name string, qtype dnsmessage.Type, conf *dnsConfig) (dnsmessage.Parser, string, error) {
 	if !isDomainName(name) {
 		// We used to use "invalid domain name" as the error,
 		// but that is a detail of the specific lookup mechanism.
@@ -426,10 +425,6 @@ func (r *Resolver) lookup(ctx context.Context, name string, qtype dnsmessage.Typ
 		// For consistency with libc resolvers, report no such host.
 		return dnsmessage.Parser{}, "", &DNSError{Err: errNoSuchHost.Error(), Name: name, IsNotFound: true}
 	}
-	resolvConf.tryUpdate("/etc/resolv.conf")
-	resolvConf.mu.RLock()
-	conf := resolvConf.dnsConfig
-	resolvConf.mu.RUnlock()
 	var (
 		p      dnsmessage.Parser
 		server string
@@ -549,10 +544,10 @@ func (o hostLookupOrder) String() string {
 // depending on our lookup code, so that Go and C get the same
 // answers.
 func (r *Resolver) goLookupHost(ctx context.Context, name string) (addrs []string, err error) {
-	return r.goLookupHostOrder(ctx, name, hostLookupFilesDNS)
+	return r.goLookupHostOrder(ctx, name, hostLookupFilesDNS, systemConf().resolv)
 }
 
-func (r *Resolver) goLookupHostOrder(ctx context.Context, name string, order hostLookupOrder) (addrs []string, err error) {
+func (r *Resolver) goLookupHostOrder(ctx context.Context, name string, order hostLookupOrder, conf *dnsConfig) (addrs []string, err error) {
 	if order == hostLookupFilesDNS || order == hostLookupFiles {
 		// Use entries from /etc/hosts if they match.
 		addrs = lookupStaticHost(name)
@@ -560,7 +555,7 @@ func (r *Resolver) goLookupHostOrder(ctx context.Context, name string, order hos
 			return
 		}
 	}
-	ips, _, err := r.goLookupIPCNAMEOrder(ctx, "ip", name, order)
+	ips, _, err := r.goLookupIPCNAMEOrder(ctx, "ip", name, order, conf)
 	if err != nil {
 		return
 	}
@@ -587,12 +582,14 @@ func goLookupIPFiles(name string) (addrs []IPAddr) {
 // goLookupIP is the native Go implementation of LookupIP.
 // The libc versions are in cgo_*.go.
 func (r *Resolver) goLookupIP(ctx context.Context, network, host string) (addrs []IPAddr, err error) {
-	order := systemConf().hostLookupOrder(r, host)
-	addrs, _, err = r.goLookupIPCNAMEOrder(ctx, network, host, order)
+	conf := systemConf()
+	order := conf.hostLookupOrder(r, host)
+	// TODO: handle resolv errors
+	addrs, _, err = r.goLookupIPCNAMEOrder(ctx, network, host, order, conf.resolv)
 	return
 }
 
-func (r *Resolver) goLookupIPCNAMEOrder(ctx context.Context, network, name string, order hostLookupOrder) (addrs []IPAddr, cname dnsmessage.Name, err error) {
+func (r *Resolver) goLookupIPCNAMEOrder(ctx context.Context, network, name string, order hostLookupOrder, conf *dnsConfig) (addrs []IPAddr, cname dnsmessage.Name, err error) {
 	if order == hostLookupFilesDNS || order == hostLookupFiles {
 		addrs = goLookupIPFiles(name)
 		if len(addrs) > 0 || order == hostLookupFiles {
@@ -603,10 +600,6 @@ func (r *Resolver) goLookupIPCNAMEOrder(ctx context.Context, network, name strin
 		// See comment in func lookup above about use of errNoSuchHost.
 		return nil, dnsmessage.Name{}, &DNSError{Err: errNoSuchHost.Error(), Name: name, IsNotFound: true}
 	}
-	resolvConf.tryUpdate("/etc/resolv.conf")
-	resolvConf.mu.RLock()
-	conf := resolvConf.dnsConfig
-	resolvConf.mu.RUnlock()
 	type result struct {
 		p      dnsmessage.Parser
 		server string
@@ -763,8 +756,9 @@ func (r *Resolver) goLookupIPCNAMEOrder(ctx context.Context, network, name strin
 
 // goLookupCNAME is the native Go (non-cgo) implementation of LookupCNAME.
 func (r *Resolver) goLookupCNAME(ctx context.Context, host string) (string, error) {
-	order := systemConf().hostLookupOrder(r, host)
-	_, cname, err := r.goLookupIPCNAMEOrder(ctx, "ip", host, order)
+	conf := systemConf()
+	order := conf.hostLookupOrder(r, host)
+	_, cname, err := r.goLookupIPCNAMEOrder(ctx, "ip", host, order, conf.resolv)
 	return cname.String(), err
 }
 
@@ -773,7 +767,7 @@ func (r *Resolver) goLookupCNAME(ctx context.Context, host string) (string, erro
 // only if cgoLookupPTR is the stub in cgo_stub.go).
 // Normally we let cgo use the C library resolver instead of depending
 // on our lookup code, so that Go and C get the same answers.
-func (r *Resolver) goLookupPTR(ctx context.Context, addr string) ([]string, error) {
+func (r *Resolver) goLookupPTR(ctx context.Context, addr string, conf *dnsConfig) ([]string, error) {
 	names := lookupStaticAddr(addr)
 	if len(names) > 0 {
 		return names, nil
@@ -782,7 +776,7 @@ func (r *Resolver) goLookupPTR(ctx context.Context, addr string) ([]string, erro
 	if err != nil {
 		return nil, err
 	}
-	p, server, err := r.lookup(ctx, arpa, dnsmessage.TypePTR)
+	p, server, err := r.lookup(ctx, arpa, dnsmessage.TypePTR, conf)
 	if err != nil {
 		return nil, err
 	}
