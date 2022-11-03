@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func dnsReadConfig(ignoredFilename string) (conf *dnsConfig) {
+func getSystemResolvConfig() (conf *dnsConfig) {
 	conf = &dnsConfig{
 		ndots:    1,
 		timeout:  5 * time.Second,

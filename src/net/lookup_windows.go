@@ -255,7 +255,7 @@ func (r *Resolver) lookupCNAME(ctx context.Context, name string) (string, error)
 
 func (r *Resolver) lookupSRV(ctx context.Context, service, proto, name string) (string, []*SRV, error) {
 	if r.preferGoOverWindows() {
-		return r.goLookupSRV(ctx, service, proto, name)
+		return r.goLookupSRV(ctx, service, proto, name, getSystemResolvConfig())
 	}
 	// TODO(bradfitz): finish ctx plumbing. Nothing currently depends on this.
 	acquireThread()
@@ -284,7 +284,7 @@ func (r *Resolver) lookupSRV(ctx context.Context, service, proto, name string) (
 
 func (r *Resolver) lookupMX(ctx context.Context, name string) ([]*MX, error) {
 	if r.preferGoOverWindows() {
-		return r.goLookupMX(ctx, name)
+		return r.goLookupMX(ctx, name, getSystemResolvConfig())
 	}
 	// TODO(bradfitz): finish ctx plumbing. Nothing currently depends on this.
 	acquireThread()
@@ -307,7 +307,7 @@ func (r *Resolver) lookupMX(ctx context.Context, name string) ([]*MX, error) {
 
 func (r *Resolver) lookupNS(ctx context.Context, name string) ([]*NS, error) {
 	if r.preferGoOverWindows() {
-		return r.goLookupNS(ctx, name)
+		return r.goLookupNS(ctx, name, getSystemResolvConfig())
 	}
 	// TODO(bradfitz): finish ctx plumbing. Nothing currently depends on this.
 	acquireThread()
@@ -329,7 +329,7 @@ func (r *Resolver) lookupNS(ctx context.Context, name string) ([]*NS, error) {
 
 func (r *Resolver) lookupTXT(ctx context.Context, name string) ([]string, error) {
 	if r.preferGoOverWindows() {
-		return r.goLookupTXT(ctx, name)
+		return r.goLookupTXT(ctx, name, getSystemResolvConfig())
 	}
 	// TODO(bradfitz): finish ctx plumbing. Nothing currently depends on this.
 	acquireThread()
@@ -355,7 +355,7 @@ func (r *Resolver) lookupTXT(ctx context.Context, name string) ([]string, error)
 
 func (r *Resolver) lookupAddr(ctx context.Context, addr string) ([]string, error) {
 	if r.preferGoOverWindows() {
-		return r.goLookupPTR(ctx, addr)
+		return r.goLookupPTR(ctx, addr, getSystemResolvConfig())
 	}
 
 	// TODO(bradfitz): finish ctx plumbing. Nothing currently depends on this.
