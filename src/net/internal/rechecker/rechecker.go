@@ -31,7 +31,7 @@ type Rechecker[T any] struct {
 	modTime     time.Time
 }
 
-func (r *Rechecker[T]) Get() (*T, error) {
+func (r *Rechecker[T]) Get() (v *T, err error) {
 	var val *value[T]
 
 	r.once.Do(func() {
