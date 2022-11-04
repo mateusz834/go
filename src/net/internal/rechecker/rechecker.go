@@ -14,8 +14,9 @@ import (
 )
 
 type value[T any] struct {
-	v   *T
-	err error
+	v        *T
+	err      error
+	noReload bool
 }
 
 type Rechecker[T any] struct {
@@ -31,7 +32,6 @@ type Rechecker[T any] struct {
 	recheckSema atomic.Bool
 	lastCheched time.Time
 	modTime     time.Time
-	noReload    bool
 }
 
 func (r *Rechecker[T]) Get() (v *T, err error) {
@@ -39,7 +39,7 @@ func (r *Rechecker[T]) Get() (v *T, err error) {
 
 	r.once.Do(func() {
 		val = &value[T]{}
-		val.v, r.modTime, val.err = r.initialFileParse()
+		val.v, val.noReload, r.modTime, val.err = r.initialFileParse()
 		r.lastCheched = time.Now()
 		r.val.Store(val)
 	})
@@ -50,7 +50,7 @@ func (r *Rechecker[T]) Get() (v *T, err error) {
 
 	val = r.val.Load()
 
-	if !r.noReload {
+	if !val.noReload {
 		// one goroutine at a time
 		if r.recheckSema.CompareAndSwap(false, true) {
 			defer r.recheckSema.Store(false)
@@ -69,7 +69,7 @@ func (r *Rechecker[T]) Get() (v *T, err error) {
 
 				if !stat.ModTime().Equal(r.modTime) {
 					val = &value[T]{}
-					val.v, val.err = r.recheckParse()
+					val.v, val.noReload, val.err = r.recheckParse()
 					r.modTime = stat.ModTime()
 					r.val.Store(val)
 					return val.v, val.err
@@ -81,15 +81,15 @@ func (r *Rechecker[T]) Get() (v *T, err error) {
 	return val.v, val.err
 }
 
-func (r *Rechecker[T]) parse(data []byte) (val *T, err error) {
+func (r *Rechecker[T]) parse(data []byte) (val *T, noReload bool, err error) {
 	val, err = r.Parse(data)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if r.NoReload != nil {
-		r.noReload = r.NoReload(val)
+		noReload = r.NoReload(val)
 	}
-	return val, nil
+	return val, noReload, nil
 }
 
 func (r *Rechecker[T]) fileErrHandle(inErr error) (val *T, err error) {
@@ -99,41 +99,43 @@ func (r *Rechecker[T]) fileErrHandle(inErr error) (val *T, err error) {
 	return r.FileErrorHandler(inErr)
 }
 
-func (r *Rechecker[T]) recheckParse() (val *T, err error) {
+func (r *Rechecker[T]) recheckParse() (val *T, noReload bool, err error) {
 	f, err := os.OpenFile(r.File, os.O_RDONLY, 0)
 	if err != nil {
-		return r.fileErrHandle(err)
+		val, err = r.fileErrHandle(err)
+		return val, false, err
 	}
 
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return r.fileErrHandle(err)
+		val, err = r.fileErrHandle(err)
+		return val, false, err
 	}
 
 	return r.parse(data)
 }
 
-func (r *Rechecker[T]) initialFileParse() (val *T, modTime time.Time, err error) {
+func (r *Rechecker[T]) initialFileParse() (val *T, noReload bool, modTime time.Time, err error) {
 	f, err := os.OpenFile(r.File, os.O_RDONLY, 0)
 	if err != nil {
 		val, err = r.fileErrHandle(err)
-		return val, time.Time{}, err
+		return val, false, time.Time{}, err
 	}
 
 	stat, err := f.Stat()
 	if err != nil {
 		val, err = r.fileErrHandle(err)
-		return val, time.Time{}, err
+		return val, false, time.Time{}, err
 	}
 
 	data, err := io.ReadAll(f)
 	if err != nil {
 		val, err = r.fileErrHandle(err)
-		return val, time.Time{}, err
+		return val, false, time.Time{}, err
 	}
 
-	val, err = r.parse(data)
-	return val, stat.ModTime(), err
+	val, noReload, err = r.parse(data)
+	return val, noReload, stat.ModTime(), err
 }
 
 // ChangeFile should be used ONLY inside tests.
@@ -145,9 +147,8 @@ func (r *Rechecker[T]) ChangeFile(file string, lastChecked time.Time) bool {
 			defer r.recheckSema.Store(false)
 			r.File = file
 			val := &value[T]{}
-			val.v, r.modTime, val.err = r.initialFileParse()
+			val.v, val.noReload, r.modTime, val.err = r.initialFileParse()
 			r.lastCheched = lastChecked
-			r.noReload = false
 			r.val.Store(val)
 			return true
 		}
