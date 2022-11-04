@@ -31,7 +31,9 @@ type Rechecker[T any] struct {
 	once        sync.Once
 	recheckSema atomic.Bool
 	lastCheched time.Time
-	modTime     time.Time
+
+	modTime time.Time
+	size    int64
 }
 
 func (r *Rechecker[T]) Get() (v *T, err error) {
@@ -39,7 +41,7 @@ func (r *Rechecker[T]) Get() (v *T, err error) {
 
 	r.once.Do(func() {
 		val = &value[T]{}
-		val.v, val.noReload, r.modTime, val.err = r.initialFileParse()
+		val.v, val.noReload, r.modTime, r.size, val.err = r.initialFileParse()
 		r.lastCheched = time.Now()
 		r.val.Store(val)
 	})
@@ -66,10 +68,11 @@ func (r *Rechecker[T]) Get() (v *T, err error) {
 					return newVal, err
 				}
 
-				if !stat.ModTime().Equal(r.modTime) {
+				if stat.Size() != r.size || !stat.ModTime().Equal(r.modTime) {
 					val = &value[T]{}
 					val.v, val.noReload, val.err = r.recheckParse()
 					r.modTime = stat.ModTime()
+					r.size = stat.Size()
 					r.val.Store(val)
 					return val.v, val.err
 				}
@@ -117,27 +120,27 @@ func (r *Rechecker[T]) recheckParse() (val *T, noReload bool, err error) {
 	return r.parse(data)
 }
 
-func (r *Rechecker[T]) initialFileParse() (val *T, noReload bool, modTime time.Time, err error) {
+func (r *Rechecker[T]) initialFileParse() (val *T, noReload bool, modTime time.Time, size int64, err error) {
 	f, err := os.OpenFile(r.File, os.O_RDONLY, 0)
 	if err != nil {
 		val, err = r.fileErrHandle(err)
-		return val, false, time.Time{}, err
+		return val, false, time.Time{}, 0, err
 	}
 
 	stat, err := f.Stat()
 	if err != nil {
 		val, err = r.fileErrHandle(err)
-		return val, false, time.Time{}, err
+		return val, false, time.Time{}, 0, err
 	}
 
 	data, err := io.ReadAll(f)
 	if err != nil {
 		val, err = r.fileErrHandle(err)
-		return val, false, time.Time{}, err
+		return val, false, time.Time{}, 0, err
 	}
 
 	val, noReload, err = r.parse(data)
-	return val, noReload, stat.ModTime(), err
+	return val, noReload, stat.ModTime(), stat.Size(), err
 }
 
 // ChangeFile should be used ONLY inside tests.
@@ -149,7 +152,7 @@ func (r *Rechecker[T]) ChangeFile(file string, lastChecked time.Time) bool {
 			defer r.recheckSema.Store(false)
 			r.File = file
 			val := &value[T]{}
-			val.v, val.noReload, r.modTime, val.err = r.initialFileParse()
+			val.v, val.noReload, r.modTime, r.size, val.err = r.initialFileParse()
 			r.lastCheched = lastChecked
 			r.val.Store(val)
 			return true

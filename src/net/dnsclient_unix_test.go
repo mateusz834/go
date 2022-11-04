@@ -2414,16 +2414,14 @@ func TestDNSConfigNoReload(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err = r.LookupHost(context.Background(), "go.dev"); err != nil {
-		t.Fatal(err)
-	}
-
 	err = conf.write([]string{"nameserver 192.0.2.200"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err = r.LookupHost(context.Background(), "go.dev"); err != nil {
-		t.Fatal(err)
+	for i := 0; i < 5; i++ {
+		if _, err = r.LookupHost(context.Background(), "go.dev"); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
