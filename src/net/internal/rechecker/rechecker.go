@@ -48,13 +48,12 @@ func (r *Rechecker[T]) Get() (v *T, err error) {
 		return val.v, val.err
 	}
 
-	val = r.val.Load()
+	// one goroutine at a time
+	if r.recheckSema.CompareAndSwap(false, true) {
+		defer r.recheckSema.Store(false)
+		val = r.val.Load()
 
-	if !val.noReload {
-		// one goroutine at a time
-		if r.recheckSema.CompareAndSwap(false, true) {
-			defer r.recheckSema.Store(false)
-
+		if !val.noReload {
 			now := time.Now()
 			if now.After(r.lastCheched.Add(r.Duration)) {
 				r.lastCheched = now
@@ -76,8 +75,11 @@ func (r *Rechecker[T]) Get() (v *T, err error) {
 				}
 			}
 		}
+
+		return val.v, val.err
 	}
 
+	val = r.val.Load()
 	return val.v, val.err
 }
 
