@@ -165,6 +165,7 @@ func ParseFlags() {
 	Flag.Shared = &Ctxt.Flag_shared
 	Flag.WB = true
 
+	Debug.ConcurrentOk = true
 	Debug.InlFuncsWithClosures = 1
 	if buildcfg.Experiment.Unified {
 		Debug.Unified = 1
@@ -178,6 +179,20 @@ func ParseFlags() {
 	objabi.AddVersionFlag() // -V
 	registerFlags()
 	objabi.Flagparse(usage)
+
+	if gcd := os.Getenv("GOCOMPILEDEBUG"); gcd != "" {
+		// This will only override the flags set in gcd;
+		// any others set on the command line remain set.
+		Flag.LowerD.Set(gcd)
+	}
+
+	if Debug.Gossahash != "" {
+		hashDebug = NewHashDebug("gosshash", Debug.Gossahash, nil)
+	}
+
+	if Debug.Fmahash != "" {
+		FmaHash = NewHashDebug("fmahash", Debug.Fmahash, nil)
+	}
 
 	if Flag.MSan && !platform.MSanSupported(buildcfg.GOOS, buildcfg.GOARCH) {
 		log.Fatalf("%s/%s does not support -msan", buildcfg.GOOS, buildcfg.GOARCH)
@@ -373,7 +388,7 @@ func concurrentBackendAllowed() bool {
 	// while writing the object file, and that is non-concurrent.
 	// Adding Debug_vlog, however, causes Debug.S to also print
 	// while flushing the plist, which happens concurrently.
-	if Ctxt.Debugvlog || Debug.Any || Flag.Live > 0 {
+	if Ctxt.Debugvlog || !Debug.ConcurrentOk || Flag.Live > 0 {
 		return false
 	}
 	// TODO: Test and delete this condition.

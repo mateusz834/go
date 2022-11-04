@@ -41,6 +41,9 @@ var systemResolv = rechecker.Rechecker[dnsConfig]{
 		}
 		return cnf, nil
 	},
+	NoReload: func(c *dnsConfig) bool {
+		return c.noReload
+	},
 }
 
 // See resolv.conf(5) on a Linux machine.
@@ -133,6 +136,8 @@ func parseDNSConfig(file []byte) *dnsConfig {
 				case s == "edns0":
 					// We use EDNS by default.
 					// Ignore this option.
+				case s == "no-reload":
+					conf.noReload = true
 				default:
 					conf.unknownOpt = true
 				}

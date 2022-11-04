@@ -19,16 +19,19 @@ type value[T any] struct {
 }
 
 type Rechecker[T any] struct {
-	File             string
-	Parse            func(content []byte) (*T, error)
+	File     string
+	Duration time.Duration
+	Parse    func(content []byte) (*T, error)
+
 	FileErrorHandler func(err error) (*T, error)
-	Duration         time.Duration
+	NoReload         func(v *T) bool
 
 	val         atomic.Pointer[value[T]]
 	once        sync.Once
 	recheckSema atomic.Bool
 	lastCheched time.Time
 	modTime     time.Time
+	noReload    bool
 }
 
 func (r *Rechecker[T]) Get() (v *T, err error) {
@@ -47,33 +50,46 @@ func (r *Rechecker[T]) Get() (v *T, err error) {
 
 	val = r.val.Load()
 
-	// one goroutine at a time
-	if r.recheckSema.CompareAndSwap(false, true) {
-		defer r.recheckSema.Store(false)
+	if !r.noReload {
+		// one goroutine at a time
+		if r.recheckSema.CompareAndSwap(false, true) {
+			defer r.recheckSema.Store(false)
 
-		now := time.Now()
-		if now.After(r.lastCheched.Add(r.Duration)) {
-			r.lastCheched = now
+			now := time.Now()
+			if now.After(r.lastCheched.Add(r.Duration)) {
+				r.lastCheched = now
 
-			stat, err := os.Stat(r.File)
-			if err != nil {
-				newVal, err := r.fileErrHandle(err)
-				val = &value[T]{v: newVal, err: err}
-				r.val.Store(val)
-				return newVal, err
-			}
+				stat, err := os.Stat(r.File)
+				if err != nil {
+					newVal, err := r.fileErrHandle(err)
+					val = &value[T]{v: newVal, err: err}
+					r.val.Store(val)
+					return newVal, err
+				}
 
-			if !stat.ModTime().Equal(r.modTime) {
-				val = &value[T]{}
-				val.v, val.err = r.recheckParse()
-				r.modTime = stat.ModTime()
-				r.val.Store(val)
-				return val.v, val.err
+				if !stat.ModTime().Equal(r.modTime) {
+					val = &value[T]{}
+					val.v, val.err = r.recheckParse()
+					r.modTime = stat.ModTime()
+					r.val.Store(val)
+					return val.v, val.err
+				}
 			}
 		}
 	}
 
 	return val.v, val.err
+}
+
+func (r *Rechecker[T]) parse(data []byte) (val *T, err error) {
+	val, err = r.Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	if r.NoReload != nil {
+		r.noReload = r.NoReload(val)
+	}
+	return val, nil
 }
 
 func (r *Rechecker[T]) fileErrHandle(inErr error) (val *T, err error) {
@@ -94,7 +110,7 @@ func (r *Rechecker[T]) recheckParse() (val *T, err error) {
 		return r.fileErrHandle(err)
 	}
 
-	return r.Parse(data)
+	return r.parse(data)
 }
 
 func (r *Rechecker[T]) initialFileParse() (val *T, modTime time.Time, err error) {
@@ -116,7 +132,7 @@ func (r *Rechecker[T]) initialFileParse() (val *T, modTime time.Time, err error)
 		return val, time.Time{}, err
 	}
 
-	val, err = r.Parse(data)
+	val, err = r.parse(data)
 	return val, stat.ModTime(), err
 }
 
@@ -131,6 +147,7 @@ func (r *Rechecker[T]) ChangeFile(file string, lastChecked time.Time) bool {
 			val := &value[T]{}
 			val.v, r.modTime, val.err = r.initialFileParse()
 			r.lastCheched = lastChecked
+			r.noReload = false
 			r.val.Store(val)
 			return true
 		}
