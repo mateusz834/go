@@ -381,3 +381,9 @@ func BenchmarkExpand(b *testing.B) {
 		expandKey(tt.key, c.enc, c.dec)
 	}
 }
+
+func BenchmarkNewCipherAES128(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		NewCipher(make([]byte, 16))
+	}
+}
