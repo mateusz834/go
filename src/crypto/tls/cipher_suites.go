@@ -200,21 +200,24 @@ type cipherSuiteTLS13 struct {
 	aead   func(key, fixedNonce []byte) aead
 	hash   crypto.Hash
 
-	hkdfPool sync.Pool
+	hkdfPool *sync.Pool
 	hmacPool *hmacPool
 	hashPool *hashPool
 }
 
+var (
+	sha256Pool     = &hashPool{new: sha256.New}
+	sha384Pool     = &hashPool{new: sha512.New384}
+	hmacSHA256Pool = &hmacPool{new: sha256Pool.new}
+	hmacSHA384Pool = &hmacPool{new: sha384Pool.new}
+	hkdfSHA256Pool = &sync.Pool{New: func() any { return hkdf.NewHKDF(sha256Pool.New) }}
+	hkdfSHA384Pool = &sync.Pool{New: func() any { return hkdf.NewHKDF(sha384Pool.New) }}
+)
+
 var cipherSuitesTLS13 = []*cipherSuiteTLS13{ // TODO: replace with a map.
-	{TLS_AES_128_GCM_SHA256, 16, aeadAESGCMTLS13, crypto.SHA256, sync.Pool{
-		New: func() any { return hkdf.NewHKDF(sha256.New) },
-	}, &hmacPool{new: sha256.New}, &hashPool{new: sha256.New}},
-	{TLS_CHACHA20_POLY1305_SHA256, 32, aeadChaCha20Poly1305, crypto.SHA256, sync.Pool{
-		New: func() any { return hkdf.NewHKDF(sha256.New) },
-	}, &hmacPool{new: sha256.New}, &hashPool{new: sha256.New}},
-	{TLS_AES_256_GCM_SHA384, 32, aeadAESGCMTLS13, crypto.SHA384, sync.Pool{
-		New: func() any { return hkdf.NewHKDF(sha512.New384) },
-	}, &hmacPool{new: sha512.New384}, &hashPool{new: sha256.New}},
+	{TLS_AES_128_GCM_SHA256, 16, aeadAESGCMTLS13, crypto.SHA256, hkdfSHA256Pool, hmacSHA256Pool, sha256Pool},
+	{TLS_CHACHA20_POLY1305_SHA256, 32, aeadChaCha20Poly1305, crypto.SHA256, hkdfSHA256Pool, hmacSHA256Pool, sha256Pool},
+	{TLS_AES_256_GCM_SHA384, 32, aeadAESGCMTLS13, crypto.SHA384, hkdfSHA384Pool, hmacSHA384Pool, sha384Pool},
 }
 
 type hmacPool struct {
