@@ -22,6 +22,8 @@ type HKDF struct {
 	hmac     hash.Hash
 	hashSize int
 	hkdf     *hkdf
+
+	buf []byte
 }
 
 func NewHKDF(hash func() hash.Hash) *HKDF {
@@ -36,6 +38,13 @@ func (h *HKDF) getHMAC(key []byte) hash.Hash {
 
 	h.hmac.(interface{ ResetKey(key []byte) }).ResetKey(key)
 	return h.hmac
+}
+
+func (h *HKDF) getBuf() []byte {
+	if h.buf == nil {
+		h.buf = make([]byte, h.hmac.Size())
+	}
+	return h.buf
 }
 
 func (h *HKDF) Extract(secret, salt []byte) []byte {

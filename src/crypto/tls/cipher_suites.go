@@ -14,6 +14,7 @@ import (
 	"crypto/rc4"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"fmt"
 	"hash"
 	"internal/cpu"
@@ -204,13 +205,13 @@ type cipherSuiteTLS13 struct {
 
 var cipherSuitesTLS13 = []*cipherSuiteTLS13{ // TODO: replace with a map.
 	{TLS_AES_128_GCM_SHA256, 16, aeadAESGCMTLS13, crypto.SHA256, sync.Pool{
-		New: func() any { return hkdf.NewHKDF(crypto.SHA256.New) },
+		New: func() any { return hkdf.NewHKDF(sha256.New) },
 	}},
 	{TLS_CHACHA20_POLY1305_SHA256, 32, aeadChaCha20Poly1305, crypto.SHA256, sync.Pool{
-		New: func() any { return hkdf.NewHKDF(crypto.SHA256.New) },
+		New: func() any { return hkdf.NewHKDF(sha256.New) },
 	}},
 	{TLS_AES_256_GCM_SHA384, 32, aeadAESGCMTLS13, crypto.SHA384, sync.Pool{
-		New: func() any { return hkdf.NewHKDF(crypto.SHA384.New) },
+		New: func() any { return hkdf.NewHKDF(sha512.New384) },
 	}},
 }
 

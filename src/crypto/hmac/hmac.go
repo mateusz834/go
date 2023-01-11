@@ -43,6 +43,11 @@ type marshalable interface {
 	UnmarshalBinary([]byte) error
 }
 
+type marshalableWithAppend interface {
+	AppendMarshalBinary([]byte) []byte
+	UnmarshalBinary([]byte) error
+}
+
 type hmac struct {
 	opad, ipad   []byte
 	outer, inner hash.Hash
@@ -86,6 +91,18 @@ func (h *hmac) Reset() {
 
 	h.inner.Reset()
 	h.inner.Write(h.ipad)
+
+	marshalableInner2, innerOK2 := h.inner.(marshalableWithAppend)
+	marshalableOuter2, outerOK2 := h.outer.(marshalableWithAppend)
+
+	if innerOK2 && outerOK2 {
+		h.ipad = marshalableInner2.AppendMarshalBinary(h.ipad[:0])
+		h.outer.Reset()
+		h.outer.Write(h.opad)
+		h.opad = marshalableOuter2.AppendMarshalBinary(h.opad[:0])
+		h.marshaled = true
+		return
+	}
 
 	// If the underlying hash is marshalable, we can save some time by
 	// saving a copy of the hash state now, and restoring it on future

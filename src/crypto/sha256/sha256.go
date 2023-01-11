@@ -64,7 +64,14 @@ const (
 )
 
 func (d *digest) MarshalBinary() ([]byte, error) {
-	b := make([]byte, 0, marshaledSize)
+	return d.AppendMarshalBinary(nil), nil
+}
+
+func (d *digest) AppendMarshalBinary(b []byte) []byte {
+	if cap(b) < marshaledSize {
+		b = make([]byte, 0, marshaledSize)
+	}
+
 	if d.is224 {
 		b = append(b, magic224...)
 	} else {
@@ -81,7 +88,7 @@ func (d *digest) MarshalBinary() ([]byte, error) {
 	b = append(b, d.x[:d.nx]...)
 	b = b[:len(b)+len(d.x)-d.nx] // already zero
 	b = binary.BigEndian.AppendUint64(b, d.len)
-	return b, nil
+	return b
 }
 
 func (d *digest) UnmarshalBinary(b []byte) error {
