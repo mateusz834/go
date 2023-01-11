@@ -41,7 +41,10 @@ func (c *cipherSuiteTLS13) expandLabel(secret []byte, label string, context []by
 		b.AddBytes(context)
 	})
 	out := make([]byte, length)
-	n, err := hkdf.Expand(c.hash.New, secret, hkdfLabel.BytesOrPanic()).Read(out)
+
+	h := c.hkdfPool.Get().(*hkdf.HKDF)
+	defer c.hkdfPool.Put(h)
+	n, err := h.Expand(secret, hkdfLabel.BytesOrPanic()).Read(out)
 	if err != nil || n != length {
 		panic("tls: HKDF-Expand-Label invocation failed unexpectedly")
 	}
@@ -61,7 +64,9 @@ func (c *cipherSuiteTLS13) extract(newSecret, currentSecret []byte) []byte {
 	if newSecret == nil {
 		newSecret = make([]byte, c.hash.Size())
 	}
-	return hkdf.Extract(c.hash.New, newSecret, currentSecret)
+	h := c.hkdfPool.Get().(*hkdf.HKDF)
+	defer c.hkdfPool.Put(h)
+	return h.Extract(newSecret, currentSecret)
 }
 
 // nextTrafficSecret generates the next traffic secret, given the current one,

@@ -18,8 +18,10 @@ import (
 	"hash"
 	"internal/cpu"
 	"runtime"
+	"sync"
 
 	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/crypto/hkdf"
 )
 
 // CipherSuite is a TLS cipher suite. Note that most functions in this package
@@ -196,12 +198,20 @@ type cipherSuiteTLS13 struct {
 	keyLen int
 	aead   func(key, fixedNonce []byte) aead
 	hash   crypto.Hash
+
+	hkdfPool sync.Pool
 }
 
 var cipherSuitesTLS13 = []*cipherSuiteTLS13{ // TODO: replace with a map.
-	{TLS_AES_128_GCM_SHA256, 16, aeadAESGCMTLS13, crypto.SHA256},
-	{TLS_CHACHA20_POLY1305_SHA256, 32, aeadChaCha20Poly1305, crypto.SHA256},
-	{TLS_AES_256_GCM_SHA384, 32, aeadAESGCMTLS13, crypto.SHA384},
+	{TLS_AES_128_GCM_SHA256, 16, aeadAESGCMTLS13, crypto.SHA256, sync.Pool{
+		New: func() any { return hkdf.NewHKDF(crypto.SHA256.New) },
+	}},
+	{TLS_CHACHA20_POLY1305_SHA256, 32, aeadChaCha20Poly1305, crypto.SHA256, sync.Pool{
+		New: func() any { return hkdf.NewHKDF(crypto.SHA256.New) },
+	}},
+	{TLS_AES_256_GCM_SHA384, 32, aeadAESGCMTLS13, crypto.SHA384, sync.Pool{
+		New: func() any { return hkdf.NewHKDF(crypto.SHA384.New) },
+	}},
 }
 
 // cipherSuitesPreferenceOrder is the order in which we'll select (on the

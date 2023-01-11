@@ -17,6 +17,45 @@ import (
 	"io"
 )
 
+type HKDF struct {
+	hash     func() hash.Hash
+	hmac     hash.Hash
+	hashSize int
+}
+
+func NewHKDF(hash func() hash.Hash) *HKDF {
+	return &HKDF{hash: hash}
+}
+
+func (h *HKDF) getHMAC(key []byte) hash.Hash {
+	if h.hmac == nil {
+		h.hmac = hmac.New(h.hash, key)
+		return h.hmac
+	}
+
+	h.hmac.(interface{ ResetKey(key []byte) }).ResetKey(key)
+	return h.hmac
+}
+
+func (h *HKDF) Extract(secret, salt []byte) []byte {
+	if salt == nil {
+		salt = make([]byte, h.hash().Size())
+	}
+	extractor := h.getHMAC(salt)
+	extractor.Write(secret)
+	return extractor.Sum(nil)
+}
+
+func (h *HKDF) Expand(pseudorandomKey, info []byte) io.Reader {
+	expander := h.getHMAC(pseudorandomKey)
+	return &hkdf{expander, expander.Size(), info, 1, nil, nil}
+}
+
+func (h *HKDF) New(secret, salt, info []byte) io.Reader {
+	prk := h.Extract(secret, salt)
+	return h.Expand(prk, info)
+}
+
 // Extract generates a pseudorandom key for use with Expand from an input secret
 // and an optional independent salt.
 //

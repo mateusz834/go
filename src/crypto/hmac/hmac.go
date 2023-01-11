@@ -120,6 +120,35 @@ func (h *hmac) Reset() {
 	h.marshaled = true
 }
 
+func (h *hmac) ResetKey(key []byte) {
+	h.inner.Reset()
+	h.outer.Reset()
+	h.marshaled = false
+
+	for i := range h.ipad {
+		h.ipad[i] = 0
+		h.opad[i] = 0
+	}
+
+	blocksize := h.inner.BlockSize()
+	h.ipad = h.ipad[:blocksize]
+	h.opad = h.opad[:blocksize]
+	if len(key) > blocksize {
+		// If key is too big, hash it.
+		h.outer.Write(key)
+		key = h.outer.Sum(nil)
+	}
+	copy(h.ipad, key)
+	copy(h.opad, key)
+	for i := range h.ipad {
+		h.ipad[i] ^= 0x36
+	}
+	for i := range h.opad {
+		h.opad[i] ^= 0x5c
+	}
+	h.inner.Write(h.ipad)
+}
+
 // New returns a new HMAC hash using the given hash.Hash type and key.
 // New functions like sha256.New from crypto/sha256 can be used as h.
 // h must return a new Hash every time it is called.
