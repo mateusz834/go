@@ -1336,6 +1336,42 @@ func BenchmarkHandshakeServer(b *testing.B) {
 	})
 }
 
+func BenchmarkClientHandshakeToOpenSSLServer(b *testing.B) {
+	port := 58888
+	addr := fmt.Sprintf("127.0.0.1:%v", port)
+
+	keyFile := filepath.Join(b.TempDir(), "key.pem")
+	certFile := filepath.Join(b.TempDir(), "cert.pem")
+
+	if err := os.WriteFile(certFile, []byte(clientCertificatePEM), 0660); err != nil {
+		b.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, []byte(clientKeyPEM), 0660); err != nil {
+		b.Fatal(err)
+	}
+
+	c := exec.Command("openssl", "s_server", "-accept", addr, "-www", "-key", keyFile, "-cert", certFile)
+	if err := c.Start(); errors.Is(err, exec.ErrNotFound) {
+		b.Skip("openssl not avaliable in PATH")
+	}
+	defer c.Process.Kill()
+
+	time.Sleep(time.Millisecond * 500)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		con, err := Dial("tcp", addr, &Config{InsecureSkipVerify: true})
+		if err != nil {
+			b.Fatal(err)
+		}
+		err = con.Handshake()
+		if err != nil {
+			b.Fatal(err)
+		}
+		con.Close()
+	}
+}
+
 func TestClientAuth(t *testing.T) {
 	var certPath, keyPath, ecdsaCertPath, ecdsaKeyPath, ed25519CertPath, ed25519KeyPath string
 

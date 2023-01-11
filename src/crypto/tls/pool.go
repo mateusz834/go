@@ -1,6 +1,7 @@
 package tls
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/sha512"
@@ -11,7 +12,8 @@ import (
 )
 
 var (
-	pool128B = &sync.Pool{New: func() any { return &[128]byte{} }}
+	pool128B   = &sync.Pool{New: func() any { return &[128]byte{} }}
+	poolBuffer = &sync.Pool{New: func() any { return &bytes.Buffer{} }}
 
 	sha256Pool     = &hashPool{new: sha256.New}
 	sha384Pool     = &hashPool{new: sha512.New384}

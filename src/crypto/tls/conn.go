@@ -96,11 +96,11 @@ type Conn struct {
 
 	// input/output
 	in, out   halfConn
-	rawInput  bytes.Buffer // raw input, starting with a record header
-	input     bytes.Reader // application data waiting to be read, from rawInput.Next
-	hand      bytes.Buffer // handshake data waiting to be read
-	buffering bool         // whether records are buffered in sendBuf
-	sendBuf   []byte       // a buffer of records waiting to be sent
+	rawInput  *bytes.Buffer // raw input, starting with a record header
+	input     bytes.Reader  // application data waiting to be read, from rawInput.Next
+	hand      bytes.Buffer  // handshake data waiting to be read
+	buffering bool          // whether records are buffered in sendBuf
+	sendBuf   []byte        // a buffer of records waiting to be sent
 
 	// bytesSent counts the bytes of application data sent.
 	// packetsSent counts packets.
@@ -1316,6 +1316,8 @@ func (c *Conn) Read(b []byte) (int, error) {
 
 // Close closes the connection.
 func (c *Conn) Close() error {
+	c.rawInput.Reset()
+	poolBuffer.Put(c.rawInput)
 	// Interlock with Conn.Write above.
 	var x int32
 	for {
@@ -1347,6 +1349,7 @@ func (c *Conn) Close() error {
 	if err := c.conn.Close(); err != nil {
 		return err
 	}
+
 	return alertErr
 }
 

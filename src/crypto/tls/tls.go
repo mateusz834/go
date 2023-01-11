@@ -33,8 +33,9 @@ import (
 // at least one certificate or else set GetCertificate.
 func Server(conn net.Conn, config *Config) *Conn {
 	c := &Conn{
-		conn:   conn,
-		config: config,
+		conn:     conn,
+		config:   config,
+		rawInput: poolBuffer.Get().(*bytes.Buffer),
 	}
 	c.handshakeFn = c.serverHandshake
 	return c
@@ -49,6 +50,7 @@ func Client(conn net.Conn, config *Config) *Conn {
 		conn:     conn,
 		config:   config,
 		isClient: true,
+		rawInput: poolBuffer.Get().(*bytes.Buffer),
 	}
 	c.handshakeFn = c.clientHandshake
 	return c
