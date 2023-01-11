@@ -9,8 +9,6 @@ import (
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/sha1"
-	"crypto/sha256"
-	"crypto/sha512"
 	"errors"
 	"fmt"
 	"hash"
@@ -24,8 +22,7 @@ func splitPreMasterSecret(secret []byte) (s1, s2 []byte) {
 }
 
 // pHash implements the P_hash function, as defined in RFC 4346, Section 5.
-func pHash(result, secret, seed []byte, hash func() hash.Hash) {
-	h := hmac.New(hash, secret)
+func pHash(result, seed []byte, h hash.Hash) {
 	h.Write(seed)
 	a := h.Sum(nil)
 
@@ -54,9 +51,9 @@ func prf10(result, secret, label, seed []byte) {
 	copy(labelAndSeed[len(label):], seed)
 
 	s1, s2 := splitPreMasterSecret(secret)
-	pHash(result, s1, labelAndSeed, hashMD5)
+	pHash(result, labelAndSeed, hmac.New(hashMD5, s1))
 	result2 := make([]byte, len(result))
-	pHash(result2, s2, labelAndSeed, hashSHA1)
+	pHash(result2, labelAndSeed, hmac.New(hashSHA1, s2))
 
 	for i, b := range result2 {
 		result[i] ^= b
@@ -64,13 +61,15 @@ func prf10(result, secret, label, seed []byte) {
 }
 
 // prf12 implements the TLS 1.2 pseudo-random function, as defined in RFC 5246, Section 5.
-func prf12(hashFunc func() hash.Hash) func(result, secret, label, seed []byte) {
+func prf12(hmacPool *hmacPool) func(result, secret, label, seed []byte) {
 	return func(result, secret, label, seed []byte) {
 		labelAndSeed := make([]byte, len(label)+len(seed))
 		copy(labelAndSeed, label)
 		copy(labelAndSeed[len(label):], seed)
 
-		pHash(result, secret, labelAndSeed, hashFunc)
+		hmac := hmacPool.New(secret)
+		defer hmacPool.Put(hmac)
+		pHash(result, labelAndSeed, hmac)
 	}
 }
 
@@ -90,9 +89,9 @@ func prfAndHashForVersion(version uint16, suite *cipherSuite) (func(result, secr
 		return prf10, crypto.Hash(0)
 	case VersionTLS12:
 		if suite.flags&suiteSHA384 != 0 {
-			return prf12(sha512.New384), crypto.SHA384
+			return prf12(hmacSHA384Pool), crypto.SHA384
 		}
-		return prf12(sha256.New), crypto.SHA256
+		return prf12(hmacSHA256Pool), crypto.SHA256
 	default:
 		panic("unknown version")
 	}
