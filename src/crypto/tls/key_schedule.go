@@ -6,7 +6,6 @@ package tls
 
 import (
 	"crypto/ecdh"
-	"crypto/hmac"
 	"encoding/binary"
 	"errors"
 	"hash"
@@ -94,7 +93,8 @@ func (c *cipherSuiteTLS13) trafficKey(trafficSecret []byte) (key, iv []byte) {
 // selection.
 func (c *cipherSuiteTLS13) finishedHash(baseKey []byte, transcript hash.Hash) []byte {
 	finishedKey := c.expandLabel(baseKey, "finished", nil, c.hash.Size())
-	verifyData := hmac.New(c.hash.New, finishedKey)
+	verifyData := c.hmacPool.New(finishedKey)
+	defer c.hmacPool.Put(verifyData)
 	verifyData.Write(transcript.Sum(nil))
 	return verifyData.Sum(nil)
 }
@@ -105,7 +105,9 @@ func (c *cipherSuiteTLS13) exportKeyingMaterial(masterSecret []byte, transcript 
 	expMasterSecret := c.deriveSecret(masterSecret, exporterLabel, transcript)
 	return func(label string, context []byte, length int) ([]byte, error) {
 		secret := c.deriveSecret(expMasterSecret, label, nil)
-		h := c.hash.New()
+		h := c.hashPool.New()
+		defer c.hashPool.Put(h)
+
 		h.Write(context)
 		return c.expandLabel(secret, "exporter", h.Sum(nil), length), nil
 	}

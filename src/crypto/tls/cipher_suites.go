@@ -201,18 +201,56 @@ type cipherSuiteTLS13 struct {
 	hash   crypto.Hash
 
 	hkdfPool sync.Pool
+	hmacPool *hmacPool
+	hashPool *hashPool
 }
 
 var cipherSuitesTLS13 = []*cipherSuiteTLS13{ // TODO: replace with a map.
 	{TLS_AES_128_GCM_SHA256, 16, aeadAESGCMTLS13, crypto.SHA256, sync.Pool{
 		New: func() any { return hkdf.NewHKDF(sha256.New) },
-	}},
+	}, &hmacPool{new: sha256.New}, &hashPool{new: sha256.New}},
 	{TLS_CHACHA20_POLY1305_SHA256, 32, aeadChaCha20Poly1305, crypto.SHA256, sync.Pool{
 		New: func() any { return hkdf.NewHKDF(sha256.New) },
-	}},
+	}, &hmacPool{new: sha256.New}, &hashPool{new: sha256.New}},
 	{TLS_AES_256_GCM_SHA384, 32, aeadAESGCMTLS13, crypto.SHA384, sync.Pool{
 		New: func() any { return hkdf.NewHKDF(sha512.New384) },
-	}},
+	}, &hmacPool{new: sha512.New384}, &hashPool{new: sha256.New}},
+}
+
+type hmacPool struct {
+	pool sync.Pool
+	new  func() hash.Hash
+}
+
+func (h *hmacPool) New(key []byte) hash.Hash {
+	if hmac := h.pool.Get(); hmac != nil {
+		hm := hmac.(hash.Hash)
+		hm.(interface{ ResetKey(key []byte) }).ResetKey(key)
+		return hm
+	}
+	return hmac.New(h.new, key)
+}
+
+func (h *hmacPool) Put(hmac hash.Hash) {
+	h.pool.Put(hmac)
+}
+
+type hashPool struct {
+	pool sync.Pool
+	new  func() hash.Hash
+}
+
+func (h *hashPool) New() hash.Hash {
+	if hmac := h.pool.Get(); hmac != nil {
+		hm := hmac.(hash.Hash)
+		hm.Reset()
+		return hm
+	}
+	return h.new()
+}
+
+func (h *hashPool) Put(hash hash.Hash) {
+	h.pool.Put(hash)
 }
 
 // cipherSuitesPreferenceOrder is the order in which we'll select (on the
