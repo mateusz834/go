@@ -21,6 +21,7 @@ type HKDF struct {
 	hash     func() hash.Hash
 	hmac     hash.Hash
 	hashSize int
+	hkdf     *hkdf
 }
 
 func NewHKDF(hash func() hash.Hash) *HKDF {
@@ -48,12 +49,11 @@ func (h *HKDF) Extract(secret, salt []byte) []byte {
 
 func (h *HKDF) Expand(pseudorandomKey, info []byte) io.Reader {
 	expander := h.getHMAC(pseudorandomKey)
-	return &hkdf{expander, expander.Size(), info, 1, nil, nil}
-}
-
-func (h *HKDF) New(secret, salt, info []byte) io.Reader {
-	prk := h.Extract(secret, salt)
-	return h.Expand(prk, info)
+	if h.hkdf == nil {
+		h.hkdf = new(hkdf)
+	}
+	*h.hkdf = hkdf{expander, expander.Size(), info, 1, nil, nil}
+	return h.hkdf
 }
 
 // Extract generates a pseudorandom key for use with Expand from an input secret

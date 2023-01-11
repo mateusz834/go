@@ -7,11 +7,12 @@ package tls
 import (
 	"crypto/ecdh"
 	"crypto/hmac"
+	"encoding/binary"
 	"errors"
 	"hash"
 	"io"
+	"sync"
 
-	"golang.org/x/crypto/cryptobyte"
 	"golang.org/x/crypto/hkdf"
 )
 
@@ -29,22 +30,28 @@ const (
 	trafficUpdateLabel            = "traffic upd"
 )
 
+var hkdfLabelPool = sync.Pool{
+	New: func() any {
+		return &[128]byte{}
+	},
+}
+
 // expandLabel implements HKDF-Expand-Label from RFC 8446, Section 7.1.
 func (c *cipherSuiteTLS13) expandLabel(secret []byte, label string, context []byte, length int) []byte {
-	var hkdfLabel cryptobyte.Builder
-	hkdfLabel.AddUint16(uint16(length))
-	hkdfLabel.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) {
-		b.AddBytes([]byte("tls13 "))
-		b.AddBytes([]byte(label))
-	})
-	hkdfLabel.AddUint8LengthPrefixed(func(b *cryptobyte.Builder) {
-		b.AddBytes(context)
-	})
-	out := make([]byte, length)
+	tmp := hkdfLabelPool.Get().(*[128]byte)
+	defer hkdfLabelPool.Put(tmp)
 
+	hkdfLabel := binary.BigEndian.AppendUint16(tmp[:0], uint16(length))
+	hkdfLabel = append(hkdfLabel, uint8(len("tls13 ")+len(label)))
+	hkdfLabel = append(hkdfLabel, []byte("tls13 ")...)
+	hkdfLabel = append(hkdfLabel, label...)
+	hkdfLabel = append(hkdfLabel, uint8(len(context)))
+	hkdfLabel = append(hkdfLabel, context...)
+
+	out := make([]byte, length)
 	h := c.hkdfPool.Get().(*hkdf.HKDF)
 	defer c.hkdfPool.Put(h)
-	n, err := h.Expand(secret, hkdfLabel.BytesOrPanic()).Read(out)
+	n, err := h.Expand(secret, hkdfLabel).Read(out)
 	if err != nil || n != length {
 		panic("tls: HKDF-Expand-Label invocation failed unexpectedly")
 	}
