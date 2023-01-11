@@ -99,7 +99,7 @@ func (m *clientHelloMsg) marshal() []byte {
 		return m.raw
 	}
 
-	var b cryptobyte.Builder
+	var b = cryptobyte.NewBuilder(make([]byte, 0, 512))
 	b.AddUint8(typeClientHello)
 	b.AddUint24LengthPrefixed(func(b *cryptobyte.Builder) {
 		b.AddUint16(m.vers)
@@ -860,7 +860,7 @@ func (m *encryptedExtensionsMsg) marshal() []byte {
 		return m.raw
 	}
 
-	var b cryptobyte.Builder
+	var b = cryptobyte.NewBuilder(make([]byte, 0, 64))
 	b.AddUint8(typeEncryptedExtensions)
 	b.AddUint24LengthPrefixed(func(b *cryptobyte.Builder) {
 		b.AddUint16LengthPrefixed(func(b *cryptobyte.Builder) {
