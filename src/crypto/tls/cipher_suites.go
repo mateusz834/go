@@ -14,7 +14,6 @@ import (
 	"crypto/rc4"
 	"crypto/sha1"
 	"crypto/sha256"
-	"crypto/sha512"
 	"fmt"
 	"hash"
 	"internal/cpu"
@@ -22,7 +21,6 @@ import (
 	"sync"
 
 	"golang.org/x/crypto/chacha20poly1305"
-	"golang.org/x/crypto/hkdf"
 )
 
 // CipherSuite is a TLS cipher suite. Note that most functions in this package
@@ -205,55 +203,10 @@ type cipherSuiteTLS13 struct {
 	hashPool *hashPool
 }
 
-var (
-	sha256Pool     = &hashPool{new: sha256.New}
-	sha384Pool     = &hashPool{new: sha512.New384}
-	hmacSHA256Pool = &hmacPool{new: sha256Pool.new}
-	hmacSHA384Pool = &hmacPool{new: sha384Pool.new}
-	hkdfSHA256Pool = &sync.Pool{New: func() any { return hkdf.NewHKDF(sha256Pool.New) }}
-	hkdfSHA384Pool = &sync.Pool{New: func() any { return hkdf.NewHKDF(sha384Pool.New) }}
-)
-
 var cipherSuitesTLS13 = []*cipherSuiteTLS13{ // TODO: replace with a map.
 	{TLS_AES_128_GCM_SHA256, 16, aeadAESGCMTLS13, crypto.SHA256, hkdfSHA256Pool, hmacSHA256Pool, sha256Pool},
 	{TLS_CHACHA20_POLY1305_SHA256, 32, aeadChaCha20Poly1305, crypto.SHA256, hkdfSHA256Pool, hmacSHA256Pool, sha256Pool},
 	{TLS_AES_256_GCM_SHA384, 32, aeadAESGCMTLS13, crypto.SHA384, hkdfSHA384Pool, hmacSHA384Pool, sha384Pool},
-}
-
-type hmacPool struct {
-	pool sync.Pool
-	new  func() hash.Hash
-}
-
-func (h *hmacPool) New(key []byte) hash.Hash {
-	if hmac := h.pool.Get(); hmac != nil {
-		hm := hmac.(hash.Hash)
-		hm.(interface{ ResetKey(key []byte) }).ResetKey(key)
-		return hm
-	}
-	return hmac.New(h.new, key)
-}
-
-func (h *hmacPool) Put(hmac hash.Hash) {
-	h.pool.Put(hmac)
-}
-
-type hashPool struct {
-	pool sync.Pool
-	new  func() hash.Hash
-}
-
-func (h *hashPool) New() hash.Hash {
-	if hmac := h.pool.Get(); hmac != nil {
-		hm := hmac.(hash.Hash)
-		hm.Reset()
-		return hm
-	}
-	return h.new()
-}
-
-func (h *hashPool) Put(hash hash.Hash) {
-	h.pool.Put(hash)
 }
 
 // cipherSuitesPreferenceOrder is the order in which we'll select (on the

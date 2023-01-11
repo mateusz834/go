@@ -10,7 +10,6 @@ import (
 	"errors"
 	"hash"
 	"io"
-	"sync"
 
 	"golang.org/x/crypto/hkdf"
 )
@@ -29,16 +28,10 @@ const (
 	trafficUpdateLabel            = "traffic upd"
 )
 
-var hkdfLabelPool = sync.Pool{
-	New: func() any {
-		return &[128]byte{}
-	},
-}
-
 // expandLabel implements HKDF-Expand-Label from RFC 8446, Section 7.1.
 func (c *cipherSuiteTLS13) expandLabel(secret []byte, label string, context []byte, length int) []byte {
-	tmp := hkdfLabelPool.Get().(*[128]byte)
-	defer hkdfLabelPool.Put(tmp)
+	tmp := pool128B.Get().(*[128]byte)
+	defer pool128B.Put(tmp)
 
 	hkdfLabel := binary.BigEndian.AppendUint16(tmp[:0], uint16(length))
 	hkdfLabel = append(hkdfLabel, uint8(len("tls13 ")+len(label)))
