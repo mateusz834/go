@@ -140,7 +140,14 @@ const (
 )
 
 func (d *digest) MarshalBinary() ([]byte, error) {
-	b := make([]byte, 0, marshaledSize)
+	return d.AppendMarshalBinary(nil), nil
+}
+
+func (d *digest) AppendMarshalBinary(b []byte) []byte {
+	if cap(b) < marshaledSize {
+		b = make([]byte, 0, marshaledSize)
+	}
+
 	switch d.function {
 	case crypto.SHA384:
 		b = append(b, magic384...)
@@ -151,7 +158,8 @@ func (d *digest) MarshalBinary() ([]byte, error) {
 	case crypto.SHA512:
 		b = append(b, magic512...)
 	default:
-		return nil, errors.New("crypto/sha512: invalid hash function")
+		//TODO: error
+		panic(errors.New("crypto/sha512: invalid hash function"))
 	}
 	b = binary.BigEndian.AppendUint64(b, d.h[0])
 	b = binary.BigEndian.AppendUint64(b, d.h[1])
@@ -164,7 +172,7 @@ func (d *digest) MarshalBinary() ([]byte, error) {
 	b = append(b, d.x[:d.nx]...)
 	b = b[:len(b)+len(d.x)-d.nx] // already zero
 	b = binary.BigEndian.AppendUint64(b, d.len)
-	return b, nil
+	return b
 }
 
 func (d *digest) UnmarshalBinary(b []byte) error {
