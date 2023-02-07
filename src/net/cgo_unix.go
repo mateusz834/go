@@ -207,7 +207,7 @@ func cgoLookupIPCNAME(network, name string) (addrs []IPAddr, cname string, err e
 
 func cgoLookupIP(ctx context.Context, network, name string) (addrs []IPAddr, err error, completed bool) {
 	addrs, err = doBlockingWithCtx(ctx, func() ([]IPAddr, error) {
-		addrs, _, err = cgoLookupIPCNAME(network, name)
+		addrs, _, err := cgoLookupIPCNAME(network, name)
 		return addrs, err
 	})
 	return addrs, err, true
