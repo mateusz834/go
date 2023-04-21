@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build (!cgo && !darwin) || netgo
+//go:build netgo || (!cgo && unix && !darwin)
 
 package net
 
 import "context"
+
+const dnsCgoAvail = false
 
 type addrinfoErrno int
 

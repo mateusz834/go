@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-//go:build netgo
+//go:build !netgo
 
 package net
 
-const buildTagNetGo = true
+const buildTagNetGo = false

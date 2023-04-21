@@ -21,6 +21,10 @@ import (
 	"golang.org/x/net/dns/dnsmessage"
 )
 
+// cgoAvailable set to true to indicate that the cgo resolver is available.
+// Note that on darwin the cgo resolver does not actually use cgo.
+const dnsCgoAvail = true
+
 // An addrinfoErrno represents a getaddrinfo, getnameinfo-specific
 // error number. It's a signed number and a zero value is a non-error
 // by convention.
