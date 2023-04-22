@@ -39,6 +39,8 @@ import (
 	"io"
 	"math"
 	"math/big"
+
+	"sync/atomic"
 )
 
 var bigOne = big.NewInt(1)
@@ -210,6 +212,10 @@ type PrecomputedValues struct {
 	// complexity.
 	CRTValues []CRTValue
 
+	precomputedBigmod atomic.Pointer[precomputedBigmodValues]
+}
+
+type precomputedBigmodValues struct {
 	n, p, q *bigmod.Modulus // moduli for CRT with Montgomery precomputed constants
 }
 
@@ -315,11 +321,15 @@ func GenerateMultiPrimeKey(random io.Reader, nprimes int, bits int) (*PrivateKey
 				Dq:        Dq,
 				Qinv:      Qinv,
 				CRTValues: make([]CRTValue, 0), // non-nil, to match Precompute
-				n:         bigmod.NewModulusFromBig(N),
-				p:         bigmod.NewModulusFromBig(P),
-				q:         bigmod.NewModulusFromBig(Q),
 			},
 		}
+
+		key.Precomputed.precomputedBigmod.Store(&precomputedBigmodValues{
+			n: bigmod.NewModulusFromBig(N),
+			p: bigmod.NewModulusFromBig(P),
+			q: bigmod.NewModulusFromBig(Q),
+		})
+
 		return key, nil
 	}
 
@@ -555,11 +565,7 @@ var ErrVerification = errors.New("crypto/rsa: verification error")
 // Precompute performs some calculations that speed up private key operations
 // in the future.
 func (priv *PrivateKey) Precompute() {
-	if priv.Precomputed.n == nil && len(priv.Primes) == 2 {
-		priv.Precomputed.n = bigmod.NewModulusFromBig(priv.N)
-		priv.Precomputed.p = bigmod.NewModulusFromBig(priv.Primes[0])
-		priv.Precomputed.q = bigmod.NewModulusFromBig(priv.Primes[1])
-	}
+	priv.precomputedBigmod()
 
 	// Fill in the backwards-compatibility *big.Int values.
 	if priv.Precomputed.Dp != nil {
@@ -590,6 +596,19 @@ func (priv *PrivateKey) Precompute() {
 	}
 }
 
+func (priv *PrivateKey) precomputedBigmod() *precomputedBigmodValues {
+	p := priv.Precomputed.precomputedBigmod.Load()
+	if p == nil && len(priv.Primes) == 2 {
+		p = &precomputedBigmodValues{
+			n: bigmod.NewModulusFromBig(priv.N),
+			p: bigmod.NewModulusFromBig(priv.Primes[0]),
+			q: bigmod.NewModulusFromBig(priv.Primes[1]),
+		}
+		priv.Precomputed.precomputedBigmod.Store(p)
+	}
+	return p
+}
+
 const withCheck = true
 const noCheck = false
 
@@ -607,7 +626,10 @@ func decrypt(priv *PrivateKey, ciphertext []byte, check bool) ([]byte, error) {
 		N    *bigmod.Modulus
 		t0   = bigmod.NewNat()
 	)
-	if priv.Precomputed.n == nil {
+
+	precomputedBigmod := priv.precomputedBigmod()
+
+	if precomputedBigmod == nil {
 		N = bigmod.NewModulusFromBig(priv.N)
 		c, err = bigmod.NewNat().SetBytes(ciphertext, N)
 		if err != nil {
@@ -615,8 +637,8 @@ func decrypt(priv *PrivateKey, ciphertext []byte, check bool) ([]byte, error) {
 		}
 		m = bigmod.NewNat().Exp(c, priv.D.Bytes(), N)
 	} else {
-		N = priv.Precomputed.n
-		P, Q := priv.Precomputed.p, priv.Precomputed.q
+		N = precomputedBigmod.n
+		P, Q := precomputedBigmod.p, precomputedBigmod.q
 		Qinv, err := bigmod.NewNat().SetBytes(priv.Precomputed.Qinv.Bytes(), P)
 		if err != nil {
 			return nil, ErrDecryption

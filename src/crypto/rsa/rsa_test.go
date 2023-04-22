@@ -10,10 +10,12 @@ import (
 	"crypto"
 	"crypto/internal/boring"
 	"crypto/rand"
+	"crypto/rsa"
 	. "crypto/rsa"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"flag"
 	"fmt"
@@ -879,4 +881,19 @@ var testEncryptOAEPData = []testEncryptOAEPStruct{
 			},
 		},
 	},
+}
+
+// See issue go.dev/issue/59695
+func BenchmarkDecryptPKCS1v15MarshalThenUnmarshalPrivateKey(b *testing.B) {
+	d, err := json.Marshal(test2048Key)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	var key rsa.PrivateKey
+	if err := json.Unmarshal(d, &key); err != nil {
+		b.Fatal(err)
+	}
+
+	b.Run("2048", func(b *testing.B) { benchmarkDecryptPKCS1v15(b, &key) })
 }
