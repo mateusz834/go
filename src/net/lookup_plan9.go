@@ -184,17 +184,7 @@ loop:
 	return
 }
 
-// preferGoOverPlan9 reports whether the resolver should use the
-// "PreferGo" implementation rather than asking plan9 services
-// for the answers.
-func (r *Resolver) preferGoOverPlan9() bool {
-	_, _, res := r.preferGoOverPlan9WithOrderAndConf()
-	return res
-}
-
-func (r *Resolver) preferGoOverPlan9WithOrderAndConf() (hostLookupOrder, *dnsConfig, bool) {
-	order, conf := systemConf().hostLookupOrder(r, "") // name is unused
-
+func (r *Resolver) canUseGoResolverOnPlan9() bool {
 	// TODO(bradfitz): for now we only permit use of the PreferGo
 	// implementation when there's a non-nil Resolver with a
 	// non-nil Dialer. This is a sign that they the code is trying
@@ -202,13 +192,23 @@ func (r *Resolver) preferGoOverPlan9WithOrderAndConf() (hostLookupOrder, *dnsCon
 	// DNS cache) and they don't want to actually hit the network.
 	// Once we add support for looking the default DNS servers
 	// from plan9, though, then we can relax this.
-	return order, conf, order != hostLookupCgo && r != nil && r.Dial != nil
+	return r != nil && r.Dial != nil
+}
+
+// preferGoOverPlan9 reports whether the resolver should use the
+// "PreferGo" implementation rather than asking plan9 services
+// for the answers.
+func (r *Resolver) preferGoOverPlan9() bool {
+	return r.canUseGoResolverOnPlan9() && systemConf().mustUseGoResolver(r)
 }
 
 func (r *Resolver) lookupIP(ctx context.Context, network, host string) (addrs []IPAddr, err error) {
-	if r.preferGoOverPlan9() {
-		return r.goLookupIP(ctx, network, host)
+	if r.canUseGoResolverOnPlan9() {
+		if order, conf := systemConf().hostLookupOrder(r, name); order != hostLookupCgo {
+			return r.goLookupIP(ctx, name, order, conf)
+		}
 	}
+
 	lits, err := r.lookupHost(ctx, host)
 	if err != nil {
 		return
@@ -253,8 +253,10 @@ func (*Resolver) lookupPort(ctx context.Context, network, service string) (port 
 }
 
 func (r *Resolver) lookupCNAME(ctx context.Context, name string) (cname string, err error) {
-	if order, conf, preferGo := r.preferGoOverPlan9WithOrderAndConf(); preferGo {
-		return r.goLookupCNAME(ctx, name, order, conf)
+	if r.canUseGoResolverOnPlan9() {
+		if order, conf := systemConf().hostLookupOrder(r, name); order != hostLookupCgo {
+			return r.goLookupCNAME(ctx, name, order, conf)
+		}
 	}
 
 	lines, err := queryDNS(ctx, name, "cname")
@@ -361,8 +363,10 @@ func (r *Resolver) lookupTXT(ctx context.Context, name string) (txt []string, er
 }
 
 func (r *Resolver) lookupAddr(ctx context.Context, addr string) (name []string, err error) {
-	if order, conf, preferGo := r.preferGoOverPlan9WithOrderAndConf(); preferGo {
-		return r.goLookupPTR(ctx, addr, order, conf)
+	if r.canUseGoResolverOnPlan9() {
+		if order, conf := systemConf().addrLookupOrder(r, name); order != hostLookupCgo {
+			return r.goLookupPTR(ctx, addr, order, conf)
+		}
 	}
 	arpa, err := reverseaddr(addr)
 	if err != nil {
