@@ -63,6 +63,12 @@ func (b *Builder) Reset() {
 	b.buf = nil
 }
 
+// ResetKeepCapacity resets the builder and keeps the remaining
+// capacity (b.Cap() - b.Len()) for future use.
+func (b *Builder) ResetKeepCapacity() {
+	b.buf = b.buf[len(b.buf):]
+}
+
 // grow copies the buffer to a new, larger buffer so that there are at least n
 // bytes of capacity beyond len(b.buf).
 func (b *Builder) grow(n int) {

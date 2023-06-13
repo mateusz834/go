@@ -6,6 +6,7 @@ package strings_test
 
 import (
 	"bytes"
+	"strings"
 	. "strings"
 	"testing"
 	"unicode/utf8"
@@ -368,4 +369,35 @@ func BenchmarkBuildString_ByteBuffer(b *testing.B) {
 			sinkS = buf.String()
 		}
 	})
+}
+
+func TestBuilderResetKeepCapacity(t *testing.T) {
+	allocs := testing.AllocsPerRun(1, func() {
+		var b strings.Builder
+		b.Grow(128)
+
+		b.WriteString("gopher1")
+		str1 := b.String()
+
+		b.ResetKeepCapacity()
+
+		b.WriteString("gopher2")
+		str2 := b.String()
+
+		if str1 != "gopher1" {
+			t.Errorf("str1 has unexpected value: %#v", str1)
+		}
+
+		if str2 != "gopher2" {
+			t.Errorf("str2 has unexpected value: %#v", str2)
+		}
+	})
+
+	if t.Failed() {
+		return
+	}
+
+	if allocs != 1 {
+		t.Fatalf("unexpected memory allocation count: %v", allocs)
+	}
 }
