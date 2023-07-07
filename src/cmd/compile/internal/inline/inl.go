@@ -506,6 +506,15 @@ func (v *hairyVisitor) doNode(n ir.Node) bool {
 		var cheap bool
 		if n.X.Op() == ir.ONAME {
 			name := n.X.(*ir.Name)
+
+			// Special case: on architectures that can do unaligned loads,
+			// explicitly mark internal/binary methods as cheap,
+			// because in practice they are, even though our inlining
+			// budgeting system does not see that. See issue 42958.
+			if base.Ctxt.Arch.CanMergeLoads && name.Class == ir.PFUNC && name.Sym().Pkg.Path == "internal/binary" {
+				cheap = true
+			}
+
 			if name.Class == ir.PFUNC && types.IsRuntimePkg(name.Sym().Pkg) {
 				fn := name.Sym().Name
 				if fn == "getcallerpc" || fn == "getcallersp" {
@@ -525,6 +534,7 @@ func (v *hairyVisitor) doNode(n ir.Node) bool {
 					cheap = true
 				}
 			}
+
 			// Special case for coverage counter updates; although
 			// these correspond to real operations, we treat them as
 			// zero cost for the moment. This is due to the existence
@@ -539,6 +549,7 @@ func (v *hairyVisitor) doNode(n ir.Node) bool {
 				return false
 			}
 		}
+
 		if n.X.Op() == ir.OMETHEXPR {
 			if meth := ir.MethodExprName(n.X); meth != nil {
 				if fn := meth.Func; fn != nil {
@@ -563,6 +574,7 @@ func (v *hairyVisitor) doNode(n ir.Node) bool {
 							"bigEndian.AppendUint64", "bigEndian.AppendUint32", "bigEndian.AppendUint16":
 							cheap = true
 						}
+
 					}
 				}
 			}
