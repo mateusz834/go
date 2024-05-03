@@ -6,6 +6,7 @@ package token
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"sync"
@@ -331,7 +332,10 @@ func searchLineInfos(a []lineInfo, x int) int {
 func (f *File) unpack(offset int, adjusted bool) (filename string, line, column int) {
 	f.mutex.Lock()
 	filename = f.name
-	if i := searchInts(f.lines, offset); i >= 0 {
+
+	i, _ := slices.BinarySearch(f.lines, offset)
+	i--
+	if i >= 0 {
 		line, column = i+1, offset-f.lines[i]+1
 	}
 	if adjusted && len(f.infos) > 0 {
@@ -339,7 +343,10 @@ func (f *File) unpack(offset int, adjusted bool) (filename string, line, column 
 		if i := searchLineInfos(f.infos, offset); i >= 0 {
 			alt := &f.infos[i]
 			filename = alt.Filename
-			if i := searchInts(f.lines, alt.Offset); i >= 0 {
+
+			i, _ := slices.BinarySearch(f.lines, offset)
+			i--
+			if i >= 0 {
 				// i+1 is the line at which the alternative position was recorded
 				d := line - (i + 1) // line distance from alternative position base
 				line = alt.Line + d
@@ -569,30 +576,4 @@ func (s *FileSet) PositionFor(p Pos, adjusted bool) (pos Position) {
 // Calling s.Position(p) is equivalent to calling s.PositionFor(p, true).
 func (s *FileSet) Position(p Pos) (pos Position) {
 	return s.PositionFor(p, true)
-}
-
-// -----------------------------------------------------------------------------
-// Helper functions
-
-func searchInts(a []int, x int) int {
-	// This function body is a manually inlined version of:
-	//
-	//   return sort.Search(len(a), func(i int) bool { return a[i] > x }) - 1
-	//
-	// With better compiler optimizations, this may not be needed in the
-	// future, but at the moment this change improves the go/printer
-	// benchmark performance by ~30%. This has a direct impact on the
-	// speed of gofmt and thus seems worthwhile (2011-04-29).
-	// TODO(gri): Remove this when compilers have caught up.
-	i, j := 0, len(a)
-	for i < j {
-		h := int(uint(i+j) >> 1) // avoid overflow when computing h
-		// i ≤ h < j
-		if a[h] <= x {
-			i = h + 1
-		} else {
-			j = h
-		}
-	}
-	return i - 1
 }
