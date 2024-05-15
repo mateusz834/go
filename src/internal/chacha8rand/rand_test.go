@@ -200,3 +200,11 @@ var output = []uint64{
 	0x11170c2eb6c19fd8, 0x44433c779062ba58, 0xc0acb51af1874c45, 0x9f2e134284809fa1,
 	0xedb523bd15c619fa, 0x02d97fd53ecc23c0, 0xacaf05a34462374c, 0xddd9c6d34bffa11f,
 }
+
+func TestFill(t *testing.T) {
+	var s State
+	s.Init64([4]uint64{1, 2, 3, 4})
+	b := make([]byte, 128)
+	s.Fill(b)
+	t.Log(b)
+}

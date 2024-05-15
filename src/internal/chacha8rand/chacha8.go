@@ -7,6 +7,12 @@
 // and must have no dependencies.
 package chacha8rand
 
+import (
+	"internal/byteorder"
+	"internal/goarch"
+	"unsafe"
+)
+
 const (
 	ctrInc = 4  // increment counter by 4 between block calls
 	ctrMax = 16 // reseed when counter reaches 16
@@ -15,6 +21,8 @@ const (
 )
 
 // block is the chacha8rand block function.
+//
+//go:noescape
 func block(seed *[4]uint64, blocks *[32]uint64, counter uint32)
 
 // A State holds the state for a single random generator.
@@ -46,6 +54,50 @@ func (s *State) Next() (uint64, bool) {
 	}
 	s.i = i + 1
 	return s.buf[i&31], true // i&31 eliminates bounds check
+}
+
+const bufLen = 32
+const bufBytesLen = 32 * 8
+
+func (s *State) Fill(b []byte) {
+	if goarch.BigEndian {
+		leCopy(b, s.buf[s.i:s.n])
+		for {
+			block(&s.seed, &s.buf, s.c)
+			leCopy(b, s.buf[:])
+		}
+	}
+
+	i := 0
+	for ; i <= len(b) && len(b[i:]) >= bufBytesLen; i += bufBytesLen {
+		block(&s.seed, (*[32]uint64)(unsafe.Pointer(&b[i])), s.c)
+	}
+
+	availRand := s.buf[s.i:s.n]
+	n := copy(b[i:], unsafe.Slice((*byte)(unsafe.Pointer(&availRand[0])), len(availRand)*8))
+	s.i += uint32((n + 7) / 8)
+	i += n
+
+	if len(b[i:]) == 0 {
+		return
+	}
+
+	block(&s.seed, &s.buf, s.c)
+	availRand = s.buf[:]
+	n = copy(b[i:], unsafe.Slice((*byte)(unsafe.Pointer(&availRand[0])), len(availRand)*8))
+	s.i = uint32((n+7)/8) + 1
+}
+
+func leCopy(dst []byte, src []uint64) {
+	for i := 0; i <= len(dst) && i <= len(src)*8; i += 8 {
+		if len(dst[i:]) < 8 {
+			var tmp [8]byte
+			byteorder.LePutUint64(tmp[:], src[i])
+			copy(dst[i:], tmp[:])
+			continue
+		}
+		byteorder.LePutUint64(dst[i:], src[i])
+	}
 }
 
 // Init seeds the State with the given seed value.
