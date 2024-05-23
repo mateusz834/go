@@ -155,7 +155,8 @@ func (s *State) FillRand(p []byte) {
 // when it uses the State struct, since the runtime
 // does not need these.
 func Marshal(s *State) []byte {
-	data := make([]byte, 6*8, 7*8+1)
+	readBuf := s.readBuf[uint8(len(s.readBuf))-s.readLen:]
+	data := make([]byte, 6*8, 6*8+len(readBuf))
 	copy(data, "chacha8:")
 	used := (s.c/ctrInc)*chunk + s.i
 	byteorder.BePutUint64(data[1*8:], uint64(used))
@@ -163,7 +164,7 @@ func Marshal(s *State) []byte {
 		byteorder.LePutUint64(data[(2+i)*8:], seed)
 	}
 	if s.readLen != 0 {
-		data = append(append(data, s.readLen), s.readBuf[:]...)
+		data = append(data, readBuf...)
 	}
 	return data
 }
@@ -176,7 +177,7 @@ func (*errUnmarshalChaCha8) Error() string {
 
 // Unmarshal unmarshals the state from a byte slice.
 func Unmarshal(s *State, data []byte) error {
-	if len(data) != 6*8 && len(data) != 7*8+1 || string(data[:8]) != "chacha8:" {
+	if len(data) < 6*8 || len(data) > 7*8 || string(data[:8]) != "chacha8:" {
 		return new(errUnmarshalChaCha8)
 	}
 	used := byteorder.BeUint64(data[1*8:])
@@ -193,9 +194,7 @@ func Unmarshal(s *State, data []byte) error {
 	if s.c == ctrMax-ctrInc {
 		s.n = chunk - reseed
 	}
-	if len(data) == 7*8+1 {
-		s.readLen = data[6*8]
-		copy(s.readBuf[:], data[6*8+1:])
-	}
+	readBuf := data[6*8:]
+	copy(s.readBuf[:], readBuf)
 	return nil
 }
