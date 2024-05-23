@@ -5,8 +5,6 @@
 package rand
 
 import (
-	"errors"
-	"internal/byteorder"
 	"internal/chacha8rand"
 )
 
@@ -14,10 +12,6 @@ import (
 // random number generator.
 type ChaCha8 struct {
 	state chacha8rand.State
-
-	// The last readLen bytes of readBuf are still to be consumed by Read.
-	readBuf [8]byte
-	readLen int // 0 <= readLen <= 8
 }
 
 // NewChaCha8 returns a new ChaCha8 seeded with the given seed.
@@ -30,8 +24,6 @@ func NewChaCha8(seed [32]byte) *ChaCha8 {
 // Seed resets the ChaCha8 to behave the same way as NewChaCha8(seed).
 func (c *ChaCha8) Seed(seed [32]byte) {
 	c.state.Init(seed)
-	c.readLen = 0
-	c.readBuf = [8]byte{}
 }
 
 // Uint64 returns a uniformly distributed random uint64 value.
@@ -52,35 +44,12 @@ func (c *ChaCha8) Uint64() uint64 {
 // returned by the two is undefined, and Read may return bits generated before
 // the last call to Uint64.
 func (c *ChaCha8) Read(p []byte) (n int, err error) {
-	if c.readLen > 0 {
-		n = copy(p, c.readBuf[len(c.readBuf)-c.readLen:])
-		c.readLen -= n
-		p = p[n:]
-	}
-	for len(p) >= 8 {
-		byteorder.LePutUint64(p, c.Uint64())
-		p = p[8:]
-		n += 8
-	}
-	if len(p) > 0 {
-		byteorder.LePutUint64(c.readBuf[:], c.Uint64())
-		n += copy(p, c.readBuf[:])
-		c.readLen = 8 - len(p)
-	}
-	return
+	c.state.FillRand(p)
+	return len(p), nil
 }
 
 // UnmarshalBinary implements the encoding.BinaryUnmarshaler interface.
 func (c *ChaCha8) UnmarshalBinary(data []byte) error {
-	data, ok := cutPrefix(data, []byte("readbuf:"))
-	if ok {
-		var buf []byte
-		buf, data, ok = readUint8LengthPrefixed(data)
-		if !ok {
-			return errors.New("invalid ChaCha8 Read buffer encoding")
-		}
-		c.readLen = copy(c.readBuf[len(c.readBuf)-len(buf):], buf)
-	}
 	return chacha8rand.Unmarshal(&c.state, data)
 }
 
@@ -100,11 +69,5 @@ func readUint8LengthPrefixed(b []byte) (buf, rest []byte, ok bool) {
 
 // MarshalBinary implements the encoding.BinaryMarshaler interface.
 func (c *ChaCha8) MarshalBinary() ([]byte, error) {
-	if c.readLen > 0 {
-		out := []byte("readbuf:")
-		out = append(out, uint8(c.readLen))
-		out = append(out, c.readBuf[len(c.readBuf)-c.readLen:]...)
-		return append(out, chacha8rand.Marshal(&c.state)...), nil
-	}
 	return chacha8rand.Marshal(&c.state), nil
 }

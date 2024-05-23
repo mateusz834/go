@@ -7,7 +7,9 @@
 // and must have minimal dependencies.
 package chacha8rand
 
-import "internal/byteorder"
+import (
+	"internal/byteorder"
+)
 
 const (
 	ctrInc = 4  // increment counter by 4 between block calls
@@ -30,6 +32,9 @@ type State struct {
 	i    uint32
 	n    uint32
 	c    uint32
+
+	readLen uint8 // 0 <= readLen <= 8
+	readBuf [8]byte
 }
 
 // Next returns the next random value, along with a boolean
@@ -115,18 +120,50 @@ func (s *State) Reseed() {
 	s.Init64(seed)
 }
 
+func (c *State) Uint64() uint64 {
+	for {
+		x, ok := c.Next()
+		if ok {
+			return x
+		}
+		c.Refill()
+	}
+}
+
+func (s *State) FillRand(p []byte) {
+	var n int
+	if s.readLen > 0 {
+		n = copy(p, s.readBuf[uint8(len(s.readBuf))-s.readLen:])
+		s.readLen -= uint8(n)
+		p = p[n:]
+	}
+	for len(p) >= 8 {
+		byteorder.LePutUint64(p, s.Uint64())
+		p = p[8:]
+		n += 8
+	}
+	if len(p) > 0 {
+		byteorder.LePutUint64(s.readBuf[:], s.Uint64())
+		n += copy(p, s.readBuf[:])
+		s.readLen = 8 - uint8(len(p))
+	}
+}
+
 // Marshal marshals the state into a byte slice.
 // Marshal and Unmarshal are functions, not methods,
 // so that they will not be linked into the runtime
 // when it uses the State struct, since the runtime
 // does not need these.
 func Marshal(s *State) []byte {
-	data := make([]byte, 6*8)
+	data := make([]byte, 6*8, 7*8+1)
 	copy(data, "chacha8:")
 	used := (s.c/ctrInc)*chunk + s.i
 	byteorder.BePutUint64(data[1*8:], uint64(used))
 	for i, seed := range s.seed {
 		byteorder.LePutUint64(data[(2+i)*8:], seed)
+	}
+	if s.readLen != 0 {
+		data = append(append(data, s.readLen), s.readBuf[:]...)
 	}
 	return data
 }
@@ -139,7 +176,7 @@ func (*errUnmarshalChaCha8) Error() string {
 
 // Unmarshal unmarshals the state from a byte slice.
 func Unmarshal(s *State, data []byte) error {
-	if len(data) != 6*8 || string(data[:8]) != "chacha8:" {
+	if len(data) != 6*8 && len(data) != 7*8+1 || string(data[:8]) != "chacha8:" {
 		return new(errUnmarshalChaCha8)
 	}
 	used := byteorder.BeUint64(data[1*8:])
@@ -155,6 +192,10 @@ func Unmarshal(s *State, data []byte) error {
 	s.n = chunk
 	if s.c == ctrMax-ctrInc {
 		s.n = chunk - reseed
+	}
+	if len(data) == 7*8+1 {
+		s.readLen = data[6*8]
+		copy(s.readBuf[:], data[6*8+1:])
 	}
 	return nil
 }
