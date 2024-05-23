@@ -131,20 +131,18 @@ func (c *State) Uint64() uint64 {
 }
 
 func (s *State) FillRand(p []byte) {
-	var n int
 	if s.readLen > 0 {
-		n = copy(p, s.readBuf[uint8(len(s.readBuf))-s.readLen:])
+		n := copy(p, s.readBuf[uint8(len(s.readBuf))-s.readLen:])
 		s.readLen -= uint8(n)
 		p = p[n:]
 	}
 	for len(p) >= 8 {
 		byteorder.LePutUint64(p, s.Uint64())
 		p = p[8:]
-		n += 8
 	}
 	if len(p) > 0 {
 		byteorder.LePutUint64(s.readBuf[:], s.Uint64())
-		n += copy(p, s.readBuf[:])
+		copy(p, s.readBuf[:])
 		s.readLen = 8 - uint8(len(p))
 	}
 }
@@ -163,10 +161,7 @@ func Marshal(s *State) []byte {
 	for i, seed := range s.seed {
 		byteorder.LePutUint64(data[(2+i)*8:], seed)
 	}
-	if s.readLen != 0 {
-		data = append(data, readBuf...)
-	}
-	return data
+	return append(data, readBuf...)
 }
 
 type errUnmarshalChaCha8 struct{}
@@ -195,6 +190,6 @@ func Unmarshal(s *State, data []byte) error {
 		s.n = chunk - reseed
 	}
 	readBuf := data[6*8:]
-	copy(s.readBuf[:], readBuf)
+	s.readLen = uint8(8 - copy(s.readBuf[len(s.readBuf)-len(readBuf):], readBuf))
 	return nil
 }
