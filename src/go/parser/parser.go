@@ -2422,6 +2422,10 @@ func (p *parser) parseStmt() (s ast.Stmt) {
 		defer un(trace(p, "Statement"))
 	}
 
+	if s := p.parseTgoStmt(); s != nil {
+		return s
+	}
+
 	switch p.tok {
 	case token.CONST, token.TYPE, token.VAR:
 		s = &ast.DeclStmt{Decl: p.parseDecl(stmtStart)}
