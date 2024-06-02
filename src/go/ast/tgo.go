@@ -32,7 +32,7 @@ type (
 
 	AttributeStmt struct {
 		StartPos  token.Pos // positon of the "@" sign
-		AttrName  Expr      // *Ident, *BasicLit, *TemplateLiteralExpr
+		AttrName  Expr      // *Ident
 		AssignPos token.Pos // positon of the "=" sign, might be token.NoPos.
 		Value     Expr      // not nil only when AssignPos != token.NoPos
 		EndPos    token.Pos

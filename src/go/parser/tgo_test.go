@@ -10,9 +10,9 @@ const tgosrc = `package main
 
 func test() {
 	<div
-	a>
-		hello
-	</div>
+		@a @a="hello"
+		"lol"
+	>
 }
 `
 
