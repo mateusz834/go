@@ -9,12 +9,14 @@ import (
 
 const tgosrc = `package main
 
-func test(sth string) {
+import "github.com/mateusz834/tgo"
+
+func test(ctx *tgo.Context, sth string) error {
 	<a
 		@class="\{siema()} \{lol}"
 		@href="https://google.com/?q=\{sth}"
 	>
-		"RTFM"
+		"RTFM at google with: \{sth}"
 	</a>
 }
 `
