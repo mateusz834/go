@@ -51,7 +51,10 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 
 			if p.tok == token.ASSIGN {
 				assignPos := p.pos
+
+				p.scanner.AllowTemplateLiteral()
 				p.next()
+
 				var val ast.Expr
 				if p.tok == token.STRING {
 					val = &ast.BasicLit{
@@ -59,8 +62,37 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 						Kind:     p.tok,
 						Value:    p.lit,
 					}
+				} else if p.tok == token.STRING_TEMPLATE {
+					startPos := p.pos
+					strings := []string{p.lit}
+					parts := []ast.Expr{}
+
+					var closePos token.Pos
+
+					for {
+						p.next()
+						parts = append(parts, p.parseExpr())
+						if p.tok != token.RBRACE {
+							p.errorExpected(p.pos, "'"+token.RBRACE.String()+"'")
+						}
+						p.pos, p.tok, p.lit = p.scanner.TemplateLiteralContinue()
+						strings = append(strings, p.lit)
+						if p.tok == token.STRING {
+							closePos = p.pos
+							break
+						}
+					}
+
+					val = &ast.TemplateLiteralExpr{
+						OpenPos:  startPos,
+						Strings:  strings,
+						Parts:    parts,
+						ClosePos: closePos,
+					}
+				} else {
+					p.expect(token.STRING)
 				}
-				p.expect(token.STRING)
+
 				return &ast.AttributeStmt{
 					StartPos:  startPos,
 					AttrName:  ident,

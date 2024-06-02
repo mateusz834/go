@@ -42,6 +42,9 @@ type Scanner struct {
 	insertSemi bool      // insert a semicolon before next newline
 	nlPos      token.Pos // position of newline in preceding comment
 
+	allowTemplateLiteral         bool
+	allowTemplateLiteralContinue bool
+
 	// public state - ok to modify
 	ErrorCount int // number of errors encountered
 }
@@ -642,9 +645,16 @@ func (s *Scanner) scanRune() string {
 	return string(s.src[offs:s.offset])
 }
 
-func (s *Scanner) scanString() string {
+func (s *Scanner) AllowTemplateLiteral() {
+	s.allowTemplateLiteral = true
+}
+
+func (s *Scanner) scanString() (token.Token, string) {
 	// '"' opening already consumed
-	offs := s.offset - 1
+	offs := s.offset
+	if !s.allowTemplateLiteralContinue {
+		offs -= 1
+	}
 
 	for {
 		ch := s.ch
@@ -657,11 +667,15 @@ func (s *Scanner) scanString() string {
 			break
 		}
 		if ch == '\\' {
+			if s.allowTemplateLiteral && s.ch == '{' {
+				s.next()
+				return token.STRING_TEMPLATE, string(s.src[offs : s.offset-2])
+			}
 			s.scanEscape('"')
 		}
 	}
 
-	return string(s.src[offs:s.offset])
+	return token.STRING, string(s.src[offs:s.offset])
 }
 
 func stripCR(b []byte, comment bool) []byte {
@@ -788,6 +802,10 @@ func (s *Scanner) switch4(tok0, tok1 token.Token, ch2 rune, tok2, tok3 token.Tok
 // set with Init. Token positions are relative to that file
 // and thus relative to the file set.
 func (s *Scanner) Scan() (pos token.Pos, tok token.Token, lit string) {
+	defer func() {
+		s.allowTemplateLiteral = false
+	}()
+
 scanAgain:
 	if s.nlPos.IsValid() {
 		// Return artificial ';' token after /*...*/ comment
@@ -838,8 +856,7 @@ scanAgain:
 			return pos, token.SEMICOLON, "\n"
 		case '"':
 			insertSemi = true
-			tok = token.STRING
-			lit = s.scanString()
+			tok, lit = s.scanString()
 		case '\'':
 			insertSemi = true
 			tok = token.CHAR
@@ -960,5 +977,13 @@ scanAgain:
 		s.insertSemi = insertSemi
 	}
 
+	return
+}
+
+func (s *Scanner) TemplateLiteralContinue() (pos token.Pos, tok token.Token, lit string) {
+	s.AllowTemplateLiteral()
+	s.allowTemplateLiteralContinue = true
+	pos = s.file.Pos(s.offset)
+	tok, lit = s.scanString()
 	return
 }

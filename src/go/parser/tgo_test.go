@@ -2,17 +2,20 @@ package parser
 
 import (
 	"go/ast"
+	"go/scanner"
 	"go/token"
 	"testing"
 )
 
 const tgosrc = `package main
 
-func test() {
-	<div
-		@a @a="hello"
-		"lol"
+func test(sth string) {
+	<a
+		@class="\{siema()} \{lol}"
+		@href="https://google.com/?q=\{sth}"
 	>
+		"RTFM"
+	</a>
 }
 `
 
@@ -23,6 +26,11 @@ func TestTgo(t *testing.T) {
 	ast.Print(fs, f)
 
 	if err != nil {
-		t.Fatal(err)
+		if v, ok := err.(scanner.ErrorList); ok {
+			for _, err := range v {
+				t.Errorf("%v", err)
+			}
+		}
+		t.Fatalf("%v", err)
 	}
 }

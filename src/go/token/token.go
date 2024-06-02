@@ -129,6 +129,8 @@ const (
 	// additional tokens, handled in an ad-hoc manner
 	TILDE
 	additional_end
+
+	STRING_TEMPLATE = 0xffffff
 )
 
 var tokens = [...]string{
@@ -231,6 +233,8 @@ var tokens = [...]string{
 	VAR:    "var",
 
 	TILDE: "~",
+
+	STRING_TEMPLATE: "STRING_TEMPLATE",
 }
 
 // String returns the string corresponding to the token tok.
