@@ -806,6 +806,9 @@ func (s *Scanner) Scan() (pos token.Pos, tok token.Token, lit string) {
 		s.allowTemplateLiteral = false
 	}()
 
+	// TODO: enable everywhere, but how to handle errors.
+	//s.allowTemplateLiteral = true
+
 scanAgain:
 	if s.nlPos.IsValid() {
 		// Return artificial ';' token after /*...*/ comment

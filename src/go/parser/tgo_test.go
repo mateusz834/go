@@ -12,12 +12,10 @@ const tgosrc = `package main
 import "github.com/mateusz834/tgo"
 
 func test(ctx *tgo.Context, sth string) error {
-	<a
-		@class="\{siema()} \{lol}"
-		@href="https://google.com/?q=\{sth}"
-	>
-		"RTFM at google with: \{sth}"
-	</a>
+	<div>"RTFM at google with \{sth+sth} \{sth}"</div>
+	//c := a {
+	//	"aa \{xd}",
+	//}
 }
 `
 

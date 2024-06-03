@@ -7,6 +7,10 @@ import (
 
 func (p *parser) parseTgoStmt() (s ast.Stmt) {
 	switch p.tok {
+	case token.STRING_TEMPLATE:
+		templLit := p.parseTemplateLiteral()
+		p.expectSemi()
+		return &ast.ExprStmt{X: templLit}
 	case token.LSS:
 		openPos := p.pos
 		p.next()
@@ -62,33 +66,10 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 						Kind:     p.tok,
 						Value:    p.lit,
 					}
+					p.next()
 				} else if p.tok == token.STRING_TEMPLATE {
-					startPos := p.pos
-					strings := []string{p.lit}
-					parts := []ast.Expr{}
-
-					var closePos token.Pos
-
-					for {
-						p.next()
-						parts = append(parts, p.parseExpr())
-						if p.tok != token.RBRACE {
-							p.errorExpected(p.pos, "'"+token.RBRACE.String()+"'")
-						}
-						p.pos, p.tok, p.lit = p.scanner.TemplateLiteralContinue()
-						strings = append(strings, p.lit)
-						if p.tok == token.STRING {
-							closePos = p.pos
-							break
-						}
-					}
-
-					val = &ast.TemplateLiteralExpr{
-						OpenPos:  startPos,
-						Strings:  strings,
-						Parts:    parts,
-						ClosePos: closePos,
-					}
+					val = p.parseTemplateLiteral()
+					p.next()
 				} else {
 					p.expect(token.STRING)
 				}
@@ -123,4 +104,35 @@ func (p *parser) parseTagStmtList() (list []ast.Stmt) {
 	}
 
 	return
+}
+
+func (p *parser) parseTemplateLiteral() *ast.TemplateLiteralExpr {
+	startPos := p.pos
+	strings := []string{p.lit}
+	parts := []ast.Expr{}
+
+	var closePos token.Pos
+
+	for {
+		p.next()
+		parts = append(parts, p.parseExpr())
+		if p.tok != token.RBRACE {
+			p.errorExpected(p.pos, "'"+token.RBRACE.String()+"'")
+		}
+		p.pos, p.tok, p.lit = p.scanner.TemplateLiteralContinue()
+		strings = append(strings, p.lit)
+		if p.tok == token.STRING {
+			closePos = p.pos
+			break
+		}
+	}
+
+	p.next()
+
+	return &ast.TemplateLiteralExpr{
+		OpenPos:  startPos,
+		Strings:  strings,
+		Parts:    parts,
+		ClosePos: closePos,
+	}
 }

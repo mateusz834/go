@@ -1408,6 +1408,7 @@ func (p *parser) parseBody() *ast.BlockStmt {
 		defer un(trace(p, "Body"))
 	}
 
+	p.scanner.AllowTemplateLiteral()
 	lbrace := p.expect(token.LBRACE)
 	list := p.parseStmtList()
 	rbrace := p.expect2(token.RBRACE)
