@@ -8,7 +8,9 @@ import (
 func (p *parser) nextTgoTemplate() {
 	if p.tok == token.STRING_TEMPLATE {
 		pos := p.pos
-		p.templateLit = append(p.templateLit, p.parseTemplateLiteral())
+		p.templateLit = append(p.templateLit, nil)
+		i := len(p.templateLit) - 1
+		p.templateLit[i] = p.parseTemplateLiteral()
 		p.tok = token.STRING_TEMPLATE
 		p.pos = pos
 		p.lit = ""
@@ -22,6 +24,10 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 		p.expectSemi()
 		lit := p.templateLit[len(p.templateLit)-1]
 		p.templateLit = p.templateLit[:len(p.templateLit)-1]
+		if lit == nil {
+			// TODO: figure out if this can happen
+			panic("unreachable")
+		}
 		return &ast.ExprStmt{X: lit}
 	case token.LSS:
 		openPos := p.pos
