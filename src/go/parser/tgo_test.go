@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// TODO: test template literal inside of template literal (yeah!)
-
 const tgosrc = `package main
 
 import "github.com/mateusz834/tgo"
@@ -21,9 +19,9 @@ func test(ctx *tgo.Context, sth string) error {
 	</div>
 	"test \{sth}"
 
-	//"hello\{func() string{
-	//	"helloooo \{sth}"
-	//}()}"
+	"hello\{func() string{
+		"helloooo \{sth}"
+	}()}"
 
 	// TODO: better error handling of cases like:
 	//_ = "hello \{sth}"
