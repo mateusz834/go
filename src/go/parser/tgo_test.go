@@ -17,8 +17,9 @@ func test(ctx *tgo.Context, sth string) error {
 	// TODO: fix
 	<div>"test"</div>
 	<div>
-		"test"
+		"test \{sth}"
 	</div>
+	"test \{sth}"
 
 	//"hello\{func() string{
 	//	"helloooo \{sth}"
