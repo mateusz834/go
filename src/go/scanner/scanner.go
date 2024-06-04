@@ -928,6 +928,9 @@ scanAgain:
 			if s.ch == '-' {
 				s.next()
 				tok = token.ARROW
+			} else if s.ch == '/' {
+				s.next()
+				tok = token.END_TAG
 			} else {
 				tok = s.switch4(token.LSS, token.LEQ, '<', token.SHL, token.SHL_ASSIGN)
 			}

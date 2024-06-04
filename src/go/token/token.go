@@ -130,7 +130,8 @@ const (
 	TILDE
 	additional_end
 
-	STRING_TEMPLATE = 0xffffff
+	END_TAG         = 0xffffff // </
+	STRING_TEMPLATE = 0xffffff + 1
 )
 
 var tokens = [...]string{
@@ -235,6 +236,7 @@ var tokens = [...]string{
 	TILDE: "~",
 
 	STRING_TEMPLATE: "STRING_TEMPLATE",
+	END_TAG:         "</",
 }
 
 // String returns the string corresponding to the token tok.

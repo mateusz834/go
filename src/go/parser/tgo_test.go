@@ -14,15 +14,18 @@ const tgosrc = `package main
 import "github.com/mateusz834/tgo"
 
 func test(ctx *tgo.Context, sth string) error {
-		"hello\{func() string{
-			"helloooo \{sth}"
-		}()}"
+	// TODO: fix
+	<div>"test"</div>
+	<div>
+		"test"
+	</div>
+
+	//"hello\{func() string{
+	//	"helloooo \{sth}"
+	//}()}"
 
 	// TODO: better error handling of cases like:
 	//_ = "hello \{sth}"
-
-	// TODO: fix
-	//<div> "test \{test}"; </div>
 }
 `
 

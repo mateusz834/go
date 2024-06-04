@@ -336,8 +336,8 @@ func (p *parser) expectClosing(tok token.Token, context string) token.Pos {
 
 // expectSemi consumes a semicolon and returns the applicable line comment.
 func (p *parser) expectSemi() (comment *ast.CommentGroup) {
-	// semicolon is optional before a closing ')' or '}'
-	if p.tok != token.RPAREN && p.tok != token.RBRACE {
+	// semicolon is optional before a closing ')' or '}' or '</'
+	if p.tok != token.RPAREN && p.tok != token.RBRACE && p.tok != token.END_TAG {
 		switch p.tok {
 		case token.COMMA:
 			// permit a ',' instead of a ';' but complain
@@ -1859,6 +1859,7 @@ func (p *parser) parseBinaryExpr(x ast.Expr, prec1 int) ast.Expr {
 	if x == nil {
 		x = p.parseUnaryExpr()
 	}
+
 	// We track the nesting here rather than at the entry for the function,
 	// since it can iteratively produce a nested output, and we want to
 	// limit how deep a structure we generate.
@@ -2439,6 +2440,7 @@ func (p *parser) parseStmt() (s ast.Stmt) {
 		token.LBRACK, token.STRUCT, token.MAP, token.CHAN, token.INTERFACE, // composite types
 		token.ADD, token.SUB, token.MUL, token.AND, token.XOR, token.ARROW, token.NOT: // unary operators
 		s, _ = p.parseSimpleStmt(labelOk)
+
 		// because of the required look-ahead, labeled statements are
 		// parsed by parseSimpleStmt - don't expect a semicolon after
 		// them

@@ -29,15 +29,10 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 			panic("unreachable")
 		}
 		return &ast.ExprStmt{X: lit}
-	case token.LSS:
+	case token.LSS, token.END_TAG:
 		openPos := p.pos
+		closing := p.tok == token.END_TAG
 		p.next()
-
-		closing := false
-		if p.tok == token.QUO {
-			closing = true
-			p.next()
-		}
 
 		ident := p.parseIdent()
 
