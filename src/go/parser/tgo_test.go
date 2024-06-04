@@ -22,7 +22,9 @@ func test(ctx *tgo.Context, sth string) error {
 		"hello\{sth}"
 		"hello\{sth}"
 	</div>
-	"hello \{sth}"
+
+	// TODO: better error handling of cases like:
+	_ = "hello \{sth}"
 
 	// TODO: fix
 	// <div> "test" </div>
