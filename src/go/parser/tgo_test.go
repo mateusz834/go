@@ -7,15 +7,25 @@ import (
 	"testing"
 )
 
+// TODO: test template literal inside of template literal (yeah!)
+
 const tgosrc = `package main
 
 import "github.com/mateusz834/tgo"
 
 func test(ctx *tgo.Context, sth string) error {
-	<div>"RTFM at google with \{sth+sth} \{sth}"</div>
-	//c := a {
-	//	"aa \{xd}",
-	//}
+	<div
+		@test
+		@test="val"
+		@test="val \{sth}"
+	>
+		"hello\{sth}"
+		"hello\{sth}"
+	</div>
+	"hello \{sth}"
+
+	// TODO: fix
+	// <div> "test" </div>
 }
 `
 

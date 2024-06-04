@@ -5,12 +5,24 @@ import (
 	"go/token"
 )
 
+func (p *parser) nextTgoTemplate() {
+	if p.tok == token.STRING_TEMPLATE {
+		pos := p.pos
+		p.templateLit = append(p.templateLit, p.parseTemplateLiteral())
+		p.tok = token.STRING_TEMPLATE
+		p.pos = pos
+		p.lit = ""
+	}
+}
+
 func (p *parser) parseTgoStmt() (s ast.Stmt) {
 	switch p.tok {
 	case token.STRING_TEMPLATE:
-		templLit := p.parseTemplateLiteral()
+		p.next()
 		p.expectSemi()
-		return &ast.ExprStmt{X: templLit}
+		lit := p.templateLit[len(p.templateLit)-1]
+		p.templateLit = p.templateLit[:len(p.templateLit)-1]
+		return &ast.ExprStmt{X: lit}
 	case token.LSS:
 		openPos := p.pos
 		p.next()
@@ -56,7 +68,6 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 			if p.tok == token.ASSIGN {
 				assignPos := p.pos
 
-				p.scanner.AllowTemplateLiteral()
 				p.next()
 
 				var val ast.Expr
@@ -68,7 +79,9 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 					}
 					p.next()
 				} else if p.tok == token.STRING_TEMPLATE {
-					val = p.parseTemplateLiteral()
+					lit := p.templateLit[len(p.templateLit)-1]
+					p.templateLit = p.templateLit[:len(p.templateLit)-1]
+					val = lit
 					p.next()
 				} else {
 					p.expect(token.STRING)
@@ -126,8 +139,6 @@ func (p *parser) parseTemplateLiteral() *ast.TemplateLiteralExpr {
 			break
 		}
 	}
-
-	p.next()
 
 	return &ast.TemplateLiteralExpr{
 		OpenPos:  startPos,

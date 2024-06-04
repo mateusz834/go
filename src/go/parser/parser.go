@@ -64,6 +64,8 @@ type parser struct {
 	// nestLev is used to track and limit the recursion depth
 	// during parsing.
 	nestLev int
+
+	templateLit []*ast.TemplateLiteralExpr
 }
 
 func (p *parser) init(fset *token.FileSet, filename string, src []byte, mode Mode) {
@@ -160,6 +162,8 @@ func (p *parser) next0() {
 		}
 		break
 	}
+
+	p.nextTgoTemplate()
 }
 
 // Consume a comment and return it and the line on which it ends.
@@ -1408,7 +1412,6 @@ func (p *parser) parseBody() *ast.BlockStmt {
 		defer un(trace(p, "Body"))
 	}
 
-	p.scanner.AllowTemplateLiteral()
 	lbrace := p.expect(token.LBRACE)
 	list := p.parseStmtList()
 	rbrace := p.expect2(token.RBRACE)

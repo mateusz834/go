@@ -42,8 +42,7 @@ type Scanner struct {
 	insertSemi bool      // insert a semicolon before next newline
 	nlPos      token.Pos // position of newline in preceding comment
 
-	allowTemplateLiteral         bool
-	allowTemplateLiteralContinue bool
+	templateLiteralContinue bool
 
 	// public state - ok to modify
 	ErrorCount int // number of errors encountered
@@ -645,14 +644,10 @@ func (s *Scanner) scanRune() string {
 	return string(s.src[offs:s.offset])
 }
 
-func (s *Scanner) AllowTemplateLiteral() {
-	s.allowTemplateLiteral = true
-}
-
 func (s *Scanner) scanString() (token.Token, string) {
 	// '"' opening already consumed
 	offs := s.offset
-	if !s.allowTemplateLiteralContinue {
+	if !s.templateLiteralContinue {
 		offs -= 1
 	}
 
@@ -667,7 +662,7 @@ func (s *Scanner) scanString() (token.Token, string) {
 			break
 		}
 		if ch == '\\' {
-			if s.allowTemplateLiteral && s.ch == '{' {
+			if s.ch == '{' {
 				s.next()
 				return token.STRING_TEMPLATE, string(s.src[offs : s.offset-2])
 			}
@@ -802,13 +797,6 @@ func (s *Scanner) switch4(tok0, tok1 token.Token, ch2 rune, tok2, tok3 token.Tok
 // set with Init. Token positions are relative to that file
 // and thus relative to the file set.
 func (s *Scanner) Scan() (pos token.Pos, tok token.Token, lit string) {
-	defer func() {
-		s.allowTemplateLiteral = false
-	}()
-
-	// TODO: enable everywhere, but how to handle errors.
-	//s.allowTemplateLiteral = true
-
 scanAgain:
 	if s.nlPos.IsValid() {
 		// Return artificial ';' token after /*...*/ comment
@@ -984,8 +972,7 @@ scanAgain:
 }
 
 func (s *Scanner) TemplateLiteralContinue() (pos token.Pos, tok token.Token, lit string) {
-	s.AllowTemplateLiteral()
-	s.allowTemplateLiteralContinue = true
+	s.templateLiteralContinue = true
 	pos = s.file.Pos(s.offset)
 	tok, lit = s.scanString()
 	return
