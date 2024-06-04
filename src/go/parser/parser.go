@@ -386,11 +386,6 @@ func assert(cond bool, msg string) {
 // advance consumes tokens until the current token p.tok
 // is in the 'to' set, or token.EOF. For error recovery.
 func (p *parser) advance(to map[token.Token]bool) {
-	//if maps.Equal(to, stmtStart) && p.tok == token.STRING_TEMPLATE {
-	//	p.next()
-	//	return
-	//}
-
 	for ; p.tok != token.EOF; p.next() {
 		if to[p.tok] {
 			// Return only if parser made some progress since last
