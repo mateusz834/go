@@ -36,6 +36,10 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 
 		ident := p.parseIdent()
 
+		if p.tok != token.AT && p.tok != token.GTR {
+			p.expectSemi()
+		}
+
 		if closing {
 			closePos := p.expect2(token.GTR)
 			return &ast.EndTagStmt{
@@ -91,6 +95,10 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 				endPos = val.End() - 1
 			}
 
+			if p.tok != token.AT && p.tok != token.GTR {
+				p.expectSemi()
+			}
+
 			return &ast.AttributeStmt{
 				StartPos:  startPos,
 				AttrName:  ident,
@@ -98,6 +106,10 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 				Value:     val,
 				EndPos:    endPos,
 			}
+		}
+
+		if p.tok != token.AT && p.tok != token.GTR {
+			p.expectSemi()
 		}
 
 		return &ast.AttributeStmt{

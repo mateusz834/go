@@ -6,20 +6,12 @@ import (
 	"go/scanner"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
-
-// TODO: get rid of EmptyStmt in Tag body.
-// TODO: figure whether we should require ';' after <div and after attributes @attr
-// except before attributes.
-// like:
-// @test @test (no need for a semi)
-// <div @test @test> (no need for a semi)
-// @test a := 3 (require semi)
-// <div; a := 3 (require semi)
 
 const tgosrc = `package main
 
@@ -27,11 +19,14 @@ import "github.com/mateusz834/tgo"
 
 func test(ctx *tgo.Context, sth string) error {
 	<div
-		@href="test" @test="hello"
+		a := 3
+		@test="val" @test="val"
+		a := 44
+		@lol="xd"
 	>
-		"test \{sth}"
-		"test \{sth}"
-	</div>
+	//	"test \{sth}"
+	//	"test \{sth}"
+	//</div>
 
 	//<div>
 	//	"test \{sth}"
@@ -314,7 +309,7 @@ func TestTgoBasicSyntax(t *testing.T) {
 		fs := token.NewFileSet()
 		f, err := ParseFile(fs, "test.go", inStr, SkipObjectResolution)
 		if err != nil {
-			t.Fatal(err)
+			t.Errorf("%v: unexpected error: %v", inStr, err)
 		}
 
 		if len(f.Decls) == 0 {
@@ -381,8 +376,42 @@ func TestTgoSyntax(t *testing.T) {
 			got := b.String()
 			if string(expect) != got {
 				t.Errorf("unexpected in %v", testFile)
+				d, err := diff(t.TempDir(), string(expect), got)
+				if err == nil {
+					t.Logf("\n%v", d)
+				}
 			}
 		}
 	}
 
+}
+
+func diff(tmpDir string, got, expect string) (string, error) {
+	gotPath := filepath.Join(tmpDir, "got")
+	gotFile, err := os.Create(gotPath)
+	if err != nil {
+		return "", err
+	}
+	defer gotFile.Close()
+	if _, err := gotFile.WriteString(got); err != nil {
+		return "", err
+	}
+
+	expectPath := filepath.Join(tmpDir, "expect")
+	expectFile, err := os.Create(expectPath)
+	if err != nil {
+		return "", err
+	}
+	defer expectFile.Close()
+	if _, err := expectFile.WriteString(expect); err != nil {
+		return "", err
+	}
+
+	var out strings.Builder
+	cmd := exec.Command("git", "diff", "-U 100000", "--no-index", "--color=always", "--ws-error-highlight=all", gotPath, expectPath)
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil && cmd.ProcessState.ExitCode() != 1 {
+		return "", err
+	}
+	return out.String(), nil
 }
