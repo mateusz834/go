@@ -1859,7 +1859,6 @@ func (p *parser) parseBinaryExpr(x ast.Expr, prec1 int) ast.Expr {
 	if x == nil {
 		x = p.parseUnaryExpr()
 	}
-
 	// We track the nesting here rather than at the entry for the function,
 	// since it can iteratively produce a nested output, and we want to
 	// limit how deep a structure we generate.

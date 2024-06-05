@@ -12,12 +12,12 @@ const tgosrc = `package main
 import "github.com/mateusz834/tgo"
 
 func test(ctx *tgo.Context, sth string) error {
-	// TODO: fix
 	<div
-		@href="test"
+		@href="test" @test="hello"
 	>
-		"test"
+		"test \{sth}"
 	</div>
+
 	//<div>
 	//	"test \{sth}"
 	//</div>
