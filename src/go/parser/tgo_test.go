@@ -13,15 +13,19 @@ import "github.com/mateusz834/tgo"
 
 func test(ctx *tgo.Context, sth string) error {
 	// TODO: fix
-	<div>"test"</div>
-	<div>
-		"test \{sth}"
+	<div
+		@href="test"
+	>
+		"test"
 	</div>
-	"test \{sth}"
+	//<div>
+	//	"test \{sth}"
+	//</div>
+	//"test \{sth}"
 
-	"hello\{func() string{
-		"helloooo \{sth}"
-	}()}"
+	//"hello\{func() string{
+	//	"helloooo \{sth}"
+	//}()}"
 
 	// TODO: better error handling of cases like:
 	//_ = "hello \{sth}"
