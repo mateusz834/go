@@ -77,10 +77,18 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 			} else if p.tok == token.STRING_TEMPLATE {
 				lit := p.templateLit[len(p.templateLit)-1]
 				p.templateLit = p.templateLit[:len(p.templateLit)-1]
+				if lit == nil {
+					panic("unreachable")
+				}
 				val = lit
 				p.next()
 			} else {
 				p.expect(token.STRING)
+			}
+
+			endPos := assignPos
+			if val != nil {
+				endPos = val.End() - 1
 			}
 
 			return &ast.AttributeStmt{
@@ -88,14 +96,14 @@ func (p *parser) parseTgoStmt() (s ast.Stmt) {
 				AttrName:  ident,
 				AssignPos: assignPos,
 				Value:     val,
-				EndPos:    p.pos,
+				EndPos:    endPos,
 			}
 		}
 
 		return &ast.AttributeStmt{
 			StartPos: startPos,
 			AttrName: ident,
-			EndPos:   ident.Pos() - 1,
+			EndPos:   ident.End() - 1,
 		}
 	}
 
