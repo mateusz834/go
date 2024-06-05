@@ -345,7 +345,7 @@ func TestTgoSyntax(t *testing.T) {
 		ext := filepath.Ext(v.Name())
 		if ext == ".tgo" {
 			testFile := filepath.Join(testdata, v.Name())
-			expectFileName := filepath.Join(testdata, v.Name()[:len(v.Name())-len(".tgo")])
+			expectFileName := filepath.Join(testdata, v.Name()[:len(v.Name())-len(".tgo")]+".ast")
 
 			content, err := os.ReadFile(testFile)
 			if err != nil {
