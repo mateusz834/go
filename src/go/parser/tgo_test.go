@@ -1,14 +1,25 @@
 package parser
 
 import (
+	"errors"
 	"go/ast"
 	"go/scanner"
 	"go/token"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
 // TODO: get rid of EmptyStmt in Tag body.
+// TODO: figure whether we should require ';' after <div and after attributes @attr
+// except before attributes.
+// like:
+// @test @test (no need for a semi)
+// <div @test @test> (no need for a semi)
+// @test a := 3 (require semi)
+// <div; a := 3 (require semi)
 
 const tgosrc = `package main
 
@@ -318,7 +329,60 @@ func TestTgoBasicSyntax(t *testing.T) {
 
 		expectList := fd.Body.List
 		if !reflect.DeepEqual(expectList, tt.out) {
-			t.Errorf("unexpected AST for: %q", inStr)
+			t.Errorf("unexpected AST for:\n%v", inStr)
 		}
 	}
+}
+
+func TestTgoSyntax(t *testing.T) {
+	const testdata = "./testdata/tgo"
+	files, err := os.ReadDir(testdata)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, v := range files {
+		ext := filepath.Ext(v.Name())
+		if ext == ".tgo" {
+			testFile := filepath.Join(testdata, v.Name())
+			expectFileName := filepath.Join(testdata, v.Name()[:len(v.Name())-len(".tgo")])
+
+			content, err := os.ReadFile(testFile)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			fs := token.NewFileSet()
+			f, err := ParseFile(fs, filepath.Base(testFile), content, SkipObjectResolution)
+			if err != nil {
+				if v, ok := err.(scanner.ErrorList); ok {
+					for _, err := range v {
+						t.Errorf("%v", err)
+					}
+				}
+				t.Errorf("Error while parsing file %v: %v", testFile, err)
+				continue
+			}
+
+			var b strings.Builder
+			ast.Fprint(&b, fs, f, ast.NotNilFilter)
+
+			expect, err := os.ReadFile(expectFileName)
+			if err != nil {
+				if errors.Is(err, os.ErrNotExist) {
+					if err := os.WriteFile(expectFileName, []byte(b.String()), 06660); err != nil {
+						t.Fatal(err)
+					}
+					continue
+				}
+				t.Fatal(err)
+			}
+
+			got := b.String()
+			if string(expect) != got {
+				t.Errorf("unexpected in %v", testFile)
+			}
+		}
+	}
+
 }
