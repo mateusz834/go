@@ -209,25 +209,11 @@ func (f *analyzer) Visit(node ast.Node) ast.Visitor {
 			return &analyzer{context: contextNotTgo, ctx: f.ctx}
 		}
 		return &analyzer{context: contextTgoBody, ctx: f.ctx}
-	case *ast.BlockStmt:
-		return f
-	case *ast.IfStmt:
-		return f
-	case *ast.SwitchStmt:
-		return f
-	case *ast.CaseClause:
-		return f
-	case *ast.ForStmt:
-		return f
-	case *ast.SelectStmt:
-		return f
-	case *ast.CommClause:
-		return f
-	case *ast.RangeStmt:
-		return f
-	case *ast.TypeSwitchStmt:
-		return f
-	case *ast.ExprStmt:
+	case *ast.BlockStmt, *ast.IfStmt,
+		*ast.SwitchStmt, *ast.CaseClause,
+		*ast.ForStmt, *ast.SelectStmt,
+		*ast.CommClause, *ast.RangeStmt,
+		*ast.TypeSwitchStmt, *ast.ExprStmt:
 		return f
 	case *ast.TemplateLiteralExpr:
 		if f.context != contextTgoBody {

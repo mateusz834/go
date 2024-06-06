@@ -27,7 +27,6 @@ func test(a string) error {
 	>
 	"hello \{sth}"
 
-
 	//	"test \{sth}"
 	//	"test \{sth}"
 	//</div>
