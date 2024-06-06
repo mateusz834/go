@@ -11,6 +11,13 @@ func walkTgo(v Visitor, node Node) bool {
 	case *EndTagStmt:
 		v.Visit(n.Name)
 		return true
+	case *AttributeStmt:
+		v.Visit(n.AttrName)
+		v.Visit(n.Value)
+		return true
+	case *TemplateLiteralExpr:
+		walkList(v, n.Parts)
+		return true
 	default:
 		return false
 	}
