@@ -18,14 +18,21 @@ const tgosrc = `package main
 import "github.com/mateusz834/tgo"
 
 func test(a string) error {
-	<div>
 	<div
-		a := 3
-		@test="val" @test="val \{xd}"
-		a := 44
-		@lol="xd"
+		@a="hello \{func() string {
+			"hello \{sth}"
+			return "test"
+		}()}"
 	>
-	"hello \{sth}"
+
+	//<div>
+	//<div
+	//	a := 3
+	//	@test="val" @test="val \{3}"
+	//	a := 44
+	//	@lol="xd"
+	//>
+	//"hello \{sth}"
 
 	//	"test \{sth}"
 	//	"test \{sth}"
