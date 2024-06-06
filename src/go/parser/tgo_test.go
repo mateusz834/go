@@ -17,13 +17,17 @@ const tgosrc = `package main
 
 import "github.com/mateusz834/tgo"
 
-func test(ctx *tgo.Context, sth string) error {
+func test(a string) error {
+	<div>
 	<div
 		a := 3
-		@test="val" @test="val"
+		@test="val" @test="val \{xd}"
 		a := 44
 		@lol="xd"
 	>
+	"hello \{sth}"
+
+
 	//	"test \{sth}"
 	//	"test \{sth}"
 	//</div>
@@ -55,6 +59,18 @@ func TestTgo(t *testing.T) {
 			}
 		}
 		t.Fatalf("%v", err)
+	}
+
+	a := analyzer{
+		ctx: &analyzerContext{
+			fs: fs,
+		},
+	}
+
+	ast.Walk(&a, f)
+
+	for _, v := range a.ctx.errors {
+		t.Logf("%v", v)
 	}
 }
 

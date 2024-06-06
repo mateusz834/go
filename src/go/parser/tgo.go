@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 )
@@ -160,5 +161,111 @@ func (p *parser) parseTemplateLiteral() *ast.TemplateLiteralExpr {
 		Strings:  strings,
 		Parts:    parts,
 		ClosePos: closePos,
+	}
+}
+
+type AnalyzeError struct {
+	Message          string
+	StartPos, EndPos token.Position
+}
+
+func (a AnalyzeError) Error() string {
+	return fmt.Sprintf("%v: %v", a.StartPos, a.Message)
+}
+
+type AnalyzeErrors []AnalyzeError
+
+func (a AnalyzeErrors) Error() string {
+	return a[0].Error()
+}
+
+type analyzerContext struct {
+	errors AnalyzeErrors
+	fs     *token.FileSet
+}
+
+type context uint8
+
+const (
+	contextNotTgo context = iota
+	contextTgoBody
+	contextTgoTag
+)
+
+type analyzer struct {
+	context context
+	ctx     *analyzerContext
+}
+
+func (f *analyzer) Visit(node ast.Node) ast.Visitor {
+	switch n := node.(type) {
+	case *ast.FuncDecl:
+		if len(n.Type.Params.List) == 0 {
+			return &analyzer{context: contextNotTgo, ctx: f.ctx}
+		}
+		return &analyzer{context: contextTgoBody, ctx: f.ctx}
+	case *ast.FuncLit:
+		if len(n.Type.Params.List) == 0 {
+			return &analyzer{context: contextNotTgo, ctx: f.ctx}
+		}
+		return &analyzer{context: contextTgoBody, ctx: f.ctx}
+	case *ast.BlockStmt:
+		return f
+	case *ast.IfStmt:
+		return f
+	case *ast.SwitchStmt:
+		return f
+	case *ast.CaseClause:
+		return f
+	case *ast.ForStmt:
+		return f
+	case *ast.SelectStmt:
+		return f
+	case *ast.CommClause:
+		return f
+	case *ast.RangeStmt:
+		return f
+	case *ast.TypeSwitchStmt:
+		return f
+	case *ast.ExprStmt:
+		return f
+	case *ast.TemplateLiteralExpr:
+		if f.context != contextTgoBody {
+			f.ctx.errors = append(f.ctx.errors, AnalyzeError{
+				Message:  "Template literal is not allowed in this context",
+				StartPos: f.ctx.fs.Position(n.Pos()),
+				EndPos:   f.ctx.fs.Position(n.End()),
+			})
+		}
+		return f
+	case *ast.OpenTagStmt:
+		if f.context != contextTgoBody {
+			f.ctx.errors = append(f.ctx.errors, AnalyzeError{
+				Message:  "Open Tag is not allowed in this context",
+				StartPos: f.ctx.fs.Position(n.Pos()),
+				EndPos:   f.ctx.fs.Position(n.End()),
+			})
+		}
+		return &analyzer{context: contextTgoTag, ctx: f.ctx}
+	case *ast.EndTagStmt:
+		if f.context != contextTgoBody {
+			f.ctx.errors = append(f.ctx.errors, AnalyzeError{
+				Message:  "End Tag is not allowed in this context",
+				StartPos: f.ctx.fs.Position(n.Pos()),
+				EndPos:   f.ctx.fs.Position(n.End()),
+			})
+		}
+		return nil
+	case *ast.AttributeStmt:
+		if f.context != contextTgoTag {
+			f.ctx.errors = append(f.ctx.errors, AnalyzeError{
+				Message:  "Attribute is not allowed in this context",
+				StartPos: f.ctx.fs.Position(n.Pos()),
+				EndPos:   f.ctx.fs.Position(n.End()),
+			})
+		}
+		return nil
+	default:
+		return &analyzer{context: contextNotTgo, ctx: f.ctx}
 	}
 }
