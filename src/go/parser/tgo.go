@@ -223,11 +223,7 @@ func (f *analyzer) Visit(node ast.Node) ast.Visitor {
 				EndPos:   f.ctx.fs.Position(n.End()),
 			})
 		}
-		// TODO: should this be? Find a case that we currently do worng.
-		// f might be contextTgoTag or contextNotTgo and this will be passed to
-		// that template literals parts.
-		// return &analyzer{context: contextNotTgo, ctx: f.ctx}
-		return f
+		return &analyzer{context: contextNotTgo, ctx: f.ctx}
 	case *ast.OpenTagStmt:
 		if f.context != contextTgoBody {
 			f.ctx.errors = append(f.ctx.errors, AnalyzeError{
