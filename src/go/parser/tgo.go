@@ -176,7 +176,13 @@ func (a AnalyzeError) Error() string {
 type AnalyzeErrors []AnalyzeError
 
 func (a AnalyzeErrors) Error() string {
-	return a[0].Error()
+	switch len(a) {
+	case 0:
+		return "no errors"
+	case 1:
+		return a[0].Error()
+	}
+	return fmt.Sprintf("%s (and %d more errors)", a[0], len(a)-1)
 }
 
 type analyzerContext struct {
@@ -250,8 +256,11 @@ func (f *analyzer) Visit(node ast.Node) ast.Visitor {
 				EndPos:   f.ctx.fs.Position(n.End()),
 			})
 		}
-		if _, ok := n.Value.(*ast.TemplateLiteralExpr); ok {
-			return &analyzer{context: contextNotTgo, ctx: f.ctx}
+		if v, ok := n.Value.(*ast.TemplateLiteralExpr); ok {
+			a := &analyzer{context: contextNotTgo, ctx: f.ctx}
+			for _, v := range v.Parts {
+				ast.Walk(a, v)
+			}
 		}
 		return nil
 	default:

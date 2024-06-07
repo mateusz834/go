@@ -21,6 +21,7 @@ func test(a string) error {
 	<div
 		@a="hello \{func(a string) string {
 			"hello \{sth}"
+			"hello \{sth}"
 			return "test"
 		}()}"
 	>
@@ -78,6 +79,7 @@ func TestTgo(t *testing.T) {
 	for _, v := range a.ctx.errors {
 		t.Logf("%v", v)
 	}
+	t.Logf("%v", a.ctx.errors)
 }
 
 func TestTgoBasicSyntax(t *testing.T) {
