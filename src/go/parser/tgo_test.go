@@ -18,13 +18,12 @@ const tgosrc = `package main
 import "github.com/mateusz834/tgo"
 
 func test(a string) error {
-	"hello \{"test \{sth}"}"
-	//<div
-	//	@a="hello \{func() string {
-	//		"hello \{sth}"
-	//		return "test"
-	//	}()}"
-	//>
+	<div
+		@a="hello \{func(a string) string {
+			"hello \{sth}"
+			return "test"
+		}()}"
+	>
 
 	//<div>
 	//<div

@@ -250,11 +250,8 @@ func (f *analyzer) Visit(node ast.Node) ast.Visitor {
 				EndPos:   f.ctx.fs.Position(n.End()),
 			})
 		}
-		if v, ok := n.Value.(*ast.TemplateLiteralExpr); ok {
-			a := &analyzer{context: contextNotTgo, ctx: f.ctx}
-			for _, v := range v.Parts {
-				ast.Walk(a, v)
-			}
+		if _, ok := n.Value.(*ast.TemplateLiteralExpr); ok {
+			return &analyzer{context: contextNotTgo, ctx: f.ctx}
 		}
 		return nil
 	default:
