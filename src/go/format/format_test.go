@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"go/ast"
 	"go/parser"
+	"go/printer"
 	"go/token"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -183,5 +185,23 @@ func TestPartial(t *testing.T) {
 				t.Errorf("formatting incorrect:\nsource: %q\nresult: %q", src, res)
 			}
 		}
+	}
+}
+
+func TestBuildDirectiveFormat(t *testing.T) {
+	const src = "package A\nimport()\nfunc A(){0//go:build\n0}"
+
+	fs := token.NewFileSet()
+	f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := printer.Fprint(io.Discard, fs, f); err != nil {
+		t.Fatal(err) // no error
+	}
+
+	if err := Node(io.Discard, fs, f); err != nil {
+		t.Fatal(err) // format.Node internal error (8:5: expected ';', found 0 (and 1 more errors))
 	}
 }
