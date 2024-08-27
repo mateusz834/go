@@ -735,9 +735,13 @@ func (p *printer) containsLinebreak() bool {
 // the comments and whitespace. The intersperseComments result indicates if a
 // newline was written or if a formfeed was dropped from the whitespace buffer.
 func (p *printer) intersperseComments(next token.Position, tok token.Token) (wroteNewline, droppedFF bool) {
+	defer func() {
+		fmt.Printf("after i %q\n", p.output)
+	}()
 	var last *ast.Comment
 	for p.commentBefore(next) {
 		list := p.comment.List
+		fmt.Printf("list: %v\n", list[0])
 		changed := false
 		if p.lastTok != token.IMPORT && // do not rewrite cgo's import "C" comments
 			p.posFor(p.comment.Pos()).Column == 1 &&

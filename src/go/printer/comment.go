@@ -5,6 +5,7 @@
 package printer
 
 import (
+	"fmt"
 	"go/ast"
 	"go/doc/comment"
 	"strings"
@@ -41,7 +42,7 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 				return list
 			}
 			// Accumulate //go:build etc lines separately.
-			if isDirective(after) {
+			if isDirective(after) && !strings.HasPrefix(after, "line ") {
 				directives = append(directives, c)
 				continue
 			}
@@ -103,6 +104,9 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 				Text:  c.Text,
 			})
 		}
+	}
+	for _, out := range out {
+		fmt.Printf("out: %v\n", out)
 	}
 	return out
 }

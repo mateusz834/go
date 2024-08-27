@@ -8,6 +8,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"runtime"
 	"testing"
 )
 
@@ -29,5 +30,22 @@ func TestPreorderBreak(t *testing.T) {
 		if id, ok := n.(*ast.Ident); ok && id.Name == "F" {
 			break
 		}
+	}
+}
+
+func BenchmarkInspect(b *testing.B) {
+	src := "package p\ntype T struct {\n\tF int `json:\"f\"` // a field\n}\n"
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "", src, 0)
+	if err != nil {
+		panic(err)
+	}
+
+	for range b.N {
+		ast.Inspect(f, func(n ast.Node) bool {
+			runtime.KeepAlive(n)
+			return true
+		})
 	}
 }
