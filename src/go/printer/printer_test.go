@@ -866,27 +866,47 @@ func TestEmptyDecl(t *testing.T) { // issue 63566
 }
 
 func TestLineCommentBeforePackage(t *testing.T) {
-	const src = `//line test2.go:1:1
+	cases := []string{
+		`//line test2.go:1:1
+// comment
+package main
+`,
+		`//line test2.go:1:1
+// comment
+//
+//go:directive
+package main
+`,
+		`//line test2.go:1:1
+// comment
+//
+//go:directive
+package main
+`,
+		`//line test2.go:1:1
+// additional comment
 //go:noilnine
 //go:build test
 //go:lol
-// additional comment
 package main
-`
-
-	fs := token.NewFileSet()
-	f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
-	if err != nil {
-		t.Fatal(err)
+`,
 	}
 
-	var s strings.Builder
-	if err := Fprint(&s, fs, f); err != nil {
-		t.Fatal(err)
-	}
+	for _, src := range cases {
+		fs := token.NewFileSet()
+		f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-	out := s.String()
-	if out != src {
-		t.Fatalf("source\n%v\nformatted as:\n%v", src, out)
+		var s strings.Builder
+		if err := Fprint(&s, fs, f); err != nil {
+			t.Fatal(err)
+		}
+
+		out := s.String()
+		if out != src {
+			t.Errorf("source\n%q\nformatted as:\n%q", src, out)
+		}
 	}
 }

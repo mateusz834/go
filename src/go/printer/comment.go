@@ -5,7 +5,6 @@
 package printer
 
 import (
-	"fmt"
 	"go/ast"
 	"go/doc/comment"
 	"strings"
@@ -17,6 +16,7 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 	// Extract comment text (removing comment markers).
 	var kind, text string
 	var directives []*ast.Comment
+	var hasOnlyLine = true
 	if len(list) == 1 && strings.HasPrefix(list[0].Text, "/*") {
 		kind = "/*"
 		text = list[0].Text
@@ -45,6 +45,13 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 			if isDirective(after) && !strings.HasPrefix(after, "line ") {
 				directives = append(directives, c)
 				continue
+			}
+			if !strings.HasPrefix(after, "line ") {
+				hasOnlyLine = false
+			}
+			if strings.HasPrefix(after, " line ") {
+				// TODO: is NUL disallowed in go/parser?
+				b.WriteByte('\000')
 			}
 			b.WriteString(strings.TrimPrefix(after, " "))
 			b.WriteString("\n")
@@ -86,6 +93,9 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 		} else if strings.HasPrefix(line, "\t") || strings.HasPrefix(line, "line ") {
 			line = "//" + line
 		} else {
+			if line[0] == '\000' {
+				line = line[1:]
+			}
 			line = "// " + line
 		}
 		out = append(out, &ast.Comment{
@@ -94,19 +104,18 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 		})
 	}
 	if len(directives) > 0 {
-		out = append(out, &ast.Comment{
-			Slash: slash,
-			Text:  "//",
-		})
+		if !hasOnlyLine {
+			out = append(out, &ast.Comment{
+				Slash: slash,
+				Text:  "//",
+			})
+		}
 		for _, c := range directives {
 			out = append(out, &ast.Comment{
 				Slash: slash,
 				Text:  c.Text,
 			})
 		}
-	}
-	for _, out := range out {
-		fmt.Printf("out: %v\n", out)
 	}
 	return out
 }
