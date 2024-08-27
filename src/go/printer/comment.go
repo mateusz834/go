@@ -83,7 +83,7 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 		line, text, _ = strings.Cut(text, "\n")
 		if line == "" {
 			line = "//"
-		} else if strings.HasPrefix(line, "\t") {
+		} else if strings.HasPrefix(line, "\t") || strings.HasPrefix(line, "line ") {
 			line = "//" + line
 		} else {
 			line = "// " + line
