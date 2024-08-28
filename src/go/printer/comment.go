@@ -6,6 +6,7 @@ package printer
 
 import (
 	"go/ast"
+	"go/build/constraint"
 	"go/doc/comment"
 	"strings"
 )
@@ -42,9 +43,12 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 				return list
 			}
 			// Accumulate //go:build etc lines separately.
-			if isDirective(after) && !strings.HasPrefix(after, "line ") {
+			if isDirective(after) && !strings.HasPrefix(after, "line ") && !constraint.IsGoBuild(c.Text) {
 				directives = append(directives, c)
 				continue
+			}
+			if !constraint.IsGoBuild(c.Text) {
+				hasOnlyLine = false
 			}
 			if !strings.HasPrefix(after, "line ") {
 				hasOnlyLine = false

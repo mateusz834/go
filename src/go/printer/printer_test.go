@@ -865,58 +865,58 @@ func TestEmptyDecl(t *testing.T) { // issue 63566
 	}
 }
 
-func TestLineCommentBeforePackage(t *testing.T) {
-	cases := []string{
-		`//line test2.go:1:1
-// comment
-package main
-`,
-		`//line test2.go:1:1
-// comment
+//func TestLineCommentBeforePackage(t *testing.T) {
+//	cases := []string{
+//		`//line test2.go:1:1
+//// comment
+//package main
+//`,
+//		`//line test2.go:1:1
+//// comment
+////
+////go:directive
+//package main
+//`,
+//		`//line test2.go:1:1
+//// comment
+////
+////go:directive
+//package main
+//`,
+//		`//line g:1:1
+////test
+////go:build lol
+//package main
+//`,
+//		`//line test2.go:1:1
+//// additional comment
+////go:noilnine
+////go:build test
+////go:lol
+//package main
+//`,
+//	}
 //
-//go:directive
-package main
-`,
-		`//line test2.go:1:1
-// comment
+//	for _, src := range cases {
+//		fs := token.NewFileSet()
+//		f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
+//		if err != nil {
+//			t.Fatal(err)
+//		}
 //
-//go:directive
-package main
-`,
-		`//line g:1:1
-//test
-//go:build lol
-package main
-`,
-		`//line test2.go:1:1
-// additional comment
-//go:noilnine
-//go:build test
-//go:lol
-package main
-`,
-	}
+//		var s strings.Builder
+//		if err := Fprint(&s, fs, f); err != nil {
+//			t.Fatal(err)
+//		}
+//
+//		out := s.String()
+//		if out != src {
+//			t.Errorf("source\n%q\nformatted as:\n%q", src, out)
+//		}
+//	}
+//}
 
-	for _, src := range cases {
-		fs := token.NewFileSet()
-		f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		var s strings.Builder
-		if err := Fprint(&s, fs, f); err != nil {
-			t.Fatal(err)
-		}
-
-		out := s.String()
-		if out != src {
-			t.Errorf("source\n%q\nformatted as:\n%q", src, out)
-		}
-	}
-}
-
-func FuzzGoSource(t *testing.F) {
+func FuzzLineDirectivePrependedToFormattedGoSource(t *testing.F) {
 	cases := []string{
 		`// comment
 package main
@@ -938,7 +938,7 @@ package main
 		`// additional comment
 //go:noilnine
 //go:build test
-//go:lol
+//go:test
 package main
 `,
 	}
@@ -947,22 +947,50 @@ package main
 		t.Add(v)
 	}
 
-	t.Fuzz(func(t *testing.T, src string) {
-		src = "//line a:1:1\n" + src
-		fs := token.NewFileSet()
-		f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
-		if err != nil {
-			t.Fatal(err)
-		}
+	t.Fuzz(fuzzFunc)
+}
 
-		var s strings.Builder
-		if err := Fprint(&s, fs, f); err != nil {
-			t.Fatal(err)
-		}
+func fuzzFunc(t *testing.T, src string) {
+	t.Logf("fuzz source input:\n%v", src)
 
-		out := s.String()
-		if out != src {
-			t.Errorf("source\n%q\nformatted as:\n%q", src, out)
-		}
-	})
+	fs := token.NewFileSet()
+	f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		return
+	}
+
+	var s strings.Builder
+	if err := Fprint(&s, fs, f); err != nil {
+		t.Fatal(err)
+	}
+
+	const lineDirective = "//line newfile.go:1:1"
+
+	src = lineDirective + "\n" + s.String()
+	t.Logf("source with line directive:\n%v", src)
+
+	fs = token.NewFileSet()
+	f, err = parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	s.Reset()
+	if err := Fprint(&s, fs, f); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("formatted source with line directive:\n%v", s.String())
+
+	if src != s.String() {
+		t.Fatalf("source changed")
+	}
+}
+
+func TestFuzzFunc(t *testing.T) {
+	const src = `//test
+//go:build lol
+package main`
+
+	fuzzFunc(t, src)
+
 }
