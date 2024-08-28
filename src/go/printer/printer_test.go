@@ -197,6 +197,7 @@ var data = []entry{
 	{"gobuild-issue-69089-3.input", "gobuild-issue-69089-3.golden", idempotent},
 	{"gobuild-issue-69089-4.input", "gobuild-issue-69089-4.golden", idempotent},
 	{"gobuild-issue-69089-5.input", "gobuild-issue-69089-5.golden", idempotent},
+	{"gobuild-issue-69089-6.input", "gobuild-issue-69089-6.golden", idempotent},
 }
 
 func TestFiles(t *testing.T) {
