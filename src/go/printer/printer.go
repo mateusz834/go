@@ -3,12 +3,12 @@
 // license that can be found in the LICENSE file.
 
 // Package printer implements printing of AST nodes.
+
 package printer
 
 import (
 	"fmt"
 	"go/ast"
-	"go/build/constraint"
 	"go/token"
 	"io"
 	"os"
@@ -67,9 +67,11 @@ type printer struct {
 	prevOpen     token.Token  // previous non-brace "open" token (, [, or token.ILLEGAL
 	wsbuf        []whiteSpace // delayed white space
 
-	inDecl    bool
-	goBuild   []int // start index of all //go:build comments in output
-	plusBuild []int // start index of all // +build comments in output
+	//inDecl            bool
+	//goBuild           []int // start index of all //go:build comments in output
+	//plusBuild         []int // start index of all // +build comments in output
+	goBuildComments   []string
+	plusBuildComments []string
 
 	// Positions
 	// The out position differs from the pos position when the result
@@ -642,13 +644,13 @@ func (p *printer) writeComment(comment *ast.Comment) {
 
 	// shortcut common case of //-style comments
 	if text[1] == '/' {
-		if !p.inDecl {
-			if constraint.IsGoBuild(text) {
-				p.goBuild = append(p.goBuild, len(p.output))
-			} else if constraint.IsPlusBuild(text) {
-				p.plusBuild = append(p.plusBuild, len(p.output))
-			}
-		}
+		//if !p.inDecl {
+		//	if constraint.IsGoBuild(text) {
+		//		p.goBuild = append(p.goBuild, len(p.output))
+		//	} else if constraint.IsPlusBuild(text) {
+		//		p.plusBuild = append(p.plusBuild, len(p.output))
+		//	}
+		//}
 		p.writeString(pos, trimRight(text), true)
 		return
 	}
@@ -748,7 +750,7 @@ func (p *printer) intersperseComments(next token.Position, tok token.Token) (wro
 			p.posFor(p.comment.End()+1) == next {
 			// Unindented comment abutting next token position:
 			// a top-level doc comment.
-			list = formatDocComment(list)
+			list = p.formatDocComment(list)
 			changed = true
 
 			if len(p.comment.List) > 0 && len(list) == 0 {

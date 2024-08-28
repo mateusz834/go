@@ -6,17 +6,18 @@ package printer
 
 import (
 	"go/ast"
+	"go/build/constraint"
 	"go/doc/comment"
 	"strings"
 )
 
 // formatDocComment reformats the doc comment list,
 // returning the canonical formatting.
-func formatDocComment(list []*ast.Comment) []*ast.Comment {
+func (p *printer) formatDocComment(list []*ast.Comment) []*ast.Comment {
 	// Extract comment text (removing comment markers).
 	var kind, text string
 	var directives []*ast.Comment
-	var goBuildCount int
+	buildFound := false
 	if len(list) == 1 && strings.HasPrefix(list[0].Text, "/*") {
 		kind = "/*"
 		text = list[0].Text
@@ -37,12 +38,19 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 		kind = "//"
 		var b strings.Builder
 		for _, c := range list {
+			if constraint.IsGoBuild(c.Text) {
+				p.goBuildComments = append(p.goBuildComments, c.Text)
+				buildFound = true
+				continue
+			} else if constraint.IsPlusBuild(c.Text) {
+				p.plusBuildComments = append(p.plusBuildComments, c.Text)
+				buildFound = true
+				continue
+			}
+
 			after, found := strings.CutPrefix(c.Text, "//")
 			if !found {
 				return list
-			}
-			if strings.HasPrefix(after, "go:build") {
-				goBuildCount++
 			}
 			// Accumulate //go:build etc lines separately.
 			if isDirective(after) {
@@ -58,13 +66,13 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 		return list
 	}
 
-	if text == "" {
+	if text == "" && !buildFound {
 		return list
 	}
 
 	// Parse comment and reformat as text.
-	var p comment.Parser
-	d := p.Parse(text)
+	var cp comment.Parser
+	d := cp.Parse(text)
 
 	var pr comment.Printer
 	text = string(pr.Comment(d))
@@ -97,12 +105,10 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 		})
 	}
 	if len(directives) > 0 {
-		if len(directives) != goBuildCount {
-			out = append(out, &ast.Comment{
-				Slash: slash,
-				Text:  "//",
-			})
-		}
+		out = append(out, &ast.Comment{
+			Slash: slash,
+			Text:  "//",
+		})
 		for _, c := range directives {
 			out = append(out, &ast.Comment{
 				Slash: slash,

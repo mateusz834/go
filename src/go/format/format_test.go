@@ -214,3 +214,12 @@ package main
 func main() {
 }
 */
+
+// TODO: also a go:build here, can it cause it to break somehow?
+// Multi line string or something?
+/*
+	// #include <stdio.h>
+	// #include <errno.h>
+	//go:build test
+	import "C"
+*/

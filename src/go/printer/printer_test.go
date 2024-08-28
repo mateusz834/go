@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -124,8 +125,11 @@ func runcheck(t *testing.T, source, golden string, mode checkMode) {
 		return
 	}
 
+	t.Logf("output:\n%s", res)
+	t.Logf("golden:\n%s", gld)
+
 	// formatted source and golden must be the same
-	if err := checkEqual(source, golden, res, gld); err != nil {
+	if err := checkEqual(fmt.Sprintf("format(%s)", source), golden, res, gld); err != nil {
 		t.Error(err)
 		return
 	}
@@ -868,4 +872,29 @@ func TestEmptyDecl(t *testing.T) { // issue 63566
 			t.Errorf("got %q, want %q", got, want)
 		}
 	}
+}
+
+func TestBuildDirectiveFormat(t *testing.T) {
+	const src = `// other comment
+
+//go:build x
+//+build a
+
+package p
+
+func f()
+`
+
+	fs := token.NewFileSet()
+	f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var out strings.Builder
+	if err := Fprint(&out, fs, f); err != nil {
+		t.Fatal(err) // no error
+	}
+
+	t.Logf("\n%s", out.String())
 }
