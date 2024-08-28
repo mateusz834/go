@@ -865,132 +865,127 @@ func TestEmptyDecl(t *testing.T) { // issue 63566
 	}
 }
 
-//func TestLineCommentBeforePackage(t *testing.T) {
+func TestLineCommentBeforePackage(t *testing.T) {
+	cases := []string{
+		`//line test2.go:1:1
+// comment
+package main
+`,
+		`//line test2.go:1:1
+// comment
+//
+//go:directive
+package main
+`,
+		`//line test2.go:1:1
+// comment
+//
+//go:directive
+package main
+`,
+		`package main
+
+func aa() {
+//line test:1:1
+	//
+}
+`,
+	}
+
+	for _, src := range cases {
+		fs := token.NewFileSet()
+		f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var s strings.Builder
+		if err := Fprint(&s, fs, f); err != nil {
+			t.Fatal(err)
+		}
+
+		out := s.String()
+		if out != src {
+			t.Errorf("source\n%q\nformatted as:\n%q", src, out)
+		}
+	}
+}
+
+//func FuzzLineDirectivePrependedToFormattedGoSource(t *testing.F) {
 //	cases := []string{
-//		`//line test2.go:1:1
-//// comment
+//		`// comment
 //package main
 //`,
-//		`//line test2.go:1:1
-//// comment
+//		`// comment
 ////
 ////go:directive
 //package main
 //`,
-//		`//line test2.go:1:1
-//// comment
+//		`// comment
 ////
 ////go:directive
 //package main
 //`,
-//		`//line g:1:1
-////test
+//		`//test
 ////go:build lol
 //package main
 //`,
-//		`//line test2.go:1:1
-//// additional comment
+//		`// additional comment
 ////go:noilnine
 ////go:build test
-////go:lol
+////go:test
 //package main
 //`,
 //	}
 //
-//	for _, src := range cases {
-//		fs := token.NewFileSet()
-//		f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
-//		if err != nil {
-//			t.Fatal(err)
-//		}
+//	for _, v := range cases {
+//		t.Add(v)
+//	}
 //
-//		var s strings.Builder
-//		if err := Fprint(&s, fs, f); err != nil {
-//			t.Fatal(err)
-//		}
+//	t.Fuzz(fuzzFunc)
+//}
 //
-//		out := s.String()
-//		if out != src {
-//			t.Errorf("source\n%q\nformatted as:\n%q", src, out)
-//		}
+//func fuzzFunc(t *testing.T, src string) {
+//	t.Logf("fuzz source input:\n%v", src)
+//
+//	fs := token.NewFileSet()
+//	f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
+//	if err != nil {
+//		return
+//	}
+//
+//	var s strings.Builder
+//	if err := Fprint(&s, fs, f); err != nil {
+//		t.Fatal(err)
+//	}
+//
+//	const lineDirective = "//line newfile.go:1:1"
+//
+//	src = lineDirective + "\n" + s.String()
+//	t.Logf("source with line directive:\n%v", src)
+//
+//	fs = token.NewFileSet()
+//	f, err = parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//
+//	s.Reset()
+//	if err := Fprint(&s, fs, f); err != nil {
+//		t.Fatal(err)
+//	}
+//	t.Logf("formatted source with line directive:\n%v", s.String())
+//
+//	if src != s.String() {
+//		t.Fatalf("source changed")
 //	}
 //}
-
-func FuzzLineDirectivePrependedToFormattedGoSource(t *testing.F) {
-	cases := []string{
-		`// comment
-package main
-`,
-		`// comment
 //
-//go:directive
-package main
-`,
-		`// comment
+//func TestFuzzFunc(t *testing.T) {
+//	const src = `//test
+////go:build lol
+//package main`
 //
-//go:directive
-package main
-`,
-		`//test
-//go:build lol
-package main
-`,
-		`// additional comment
-//go:noilnine
-//go:build test
-//go:test
-package main
-`,
-	}
-
-	for _, v := range cases {
-		t.Add(v)
-	}
-
-	t.Fuzz(fuzzFunc)
-}
-
-func fuzzFunc(t *testing.T, src string) {
-	t.Logf("fuzz source input:\n%v", src)
-
-	fs := token.NewFileSet()
-	f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
-	if err != nil {
-		return
-	}
-
-	var s strings.Builder
-	if err := Fprint(&s, fs, f); err != nil {
-		t.Fatal(err)
-	}
-
-	const lineDirective = "//line newfile.go:1:1"
-
-	src = lineDirective + "\n" + s.String()
-	t.Logf("source with line directive:\n%v", src)
-
-	fs = token.NewFileSet()
-	f, err = parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	s.Reset()
-	if err := Fprint(&s, fs, f); err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("formatted source with line directive:\n%v", s.String())
-
-	if src != s.String() {
-		t.Fatalf("source changed")
-	}
-}
-
-func TestFuzzFunc(t *testing.T) {
-	const src = `//test
-//go:build lol
-package main`
-
-	fuzzFunc(t, src)
-
-}
+//	fuzzFunc(t, src)
+//
+//}

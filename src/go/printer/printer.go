@@ -1370,8 +1370,6 @@ func (cfg *Config) fprint(output io.Writer, fset *token.FileSet, node any, nodeS
 	p.impliedSemi = false // EOF acts like a newline
 	p.flush(token.Position{Offset: infinity, Line: infinity}, token.EOF)
 
-	fmt.Printf("p.output: %q\n", p.output)
-
 	// output is buffered in p.output now.
 	// fix //go:build and // +build comments if needed.
 	p.fixGoBuildLines()
