@@ -883,6 +883,11 @@ package main
 //go:directive
 package main
 `,
+		`//line g:1:1
+//test
+//go:build lol
+package main
+`,
 		`//line test2.go:1:1
 // additional comment
 //go:noilnine
@@ -909,4 +914,55 @@ package main
 			t.Errorf("source\n%q\nformatted as:\n%q", src, out)
 		}
 	}
+}
+
+func FuzzGoSource(t *testing.F) {
+	cases := []string{
+		`// comment
+package main
+`,
+		`// comment
+//
+//go:directive
+package main
+`,
+		`// comment
+//
+//go:directive
+package main
+`,
+		`//test
+//go:build lol
+package main
+`,
+		`// additional comment
+//go:noilnine
+//go:build test
+//go:lol
+package main
+`,
+	}
+
+	for _, v := range cases {
+		t.Add(v)
+	}
+
+	t.Fuzz(func(t *testing.T, src string) {
+		src = "//line a:1:1\n" + src
+		fs := token.NewFileSet()
+		f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		var s strings.Builder
+		if err := Fprint(&s, fs, f); err != nil {
+			t.Fatal(err)
+		}
+
+		out := s.String()
+		if out != src {
+			t.Errorf("source\n%q\nformatted as:\n%q", src, out)
+		}
+	})
 }
