@@ -16,6 +16,7 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 	// Extract comment text (removing comment markers).
 	var kind, text string
 	var directives []*ast.Comment
+	var goBuildCount int
 	if len(list) == 1 && strings.HasPrefix(list[0].Text, "/*") {
 		kind = "/*"
 		text = list[0].Text
@@ -39,6 +40,9 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 			after, found := strings.CutPrefix(c.Text, "//")
 			if !found {
 				return list
+			}
+			if strings.HasPrefix(after, "go:build") {
+				goBuildCount++
 			}
 			// Accumulate //go:build etc lines separately.
 			if isDirective(after) {
@@ -93,10 +97,12 @@ func formatDocComment(list []*ast.Comment) []*ast.Comment {
 		})
 	}
 	if len(directives) > 0 {
-		out = append(out, &ast.Comment{
-			Slash: slash,
-			Text:  "//",
-		})
+		if len(directives) != goBuildCount {
+			out = append(out, &ast.Comment{
+				Slash: slash,
+				Text:  "//",
+			})
+		}
 		for _, c := range directives {
 			out = append(out, &ast.Comment{
 				Slash: slash,
