@@ -1,0 +1,6 @@
+package buildtag
+
+func test() {
+}
+
+//go:build test

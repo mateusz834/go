@@ -66,8 +66,10 @@ type printer struct {
 	lastTok      token.Token  // last token printed (token.ILLEGAL if it's whitespace)
 	prevOpen     token.Token  // previous non-brace "open" token (, [, or token.ILLEGAL
 	wsbuf        []whiteSpace // delayed white space
-	goBuild      []int        // start index of all //go:build comments in output
-	plusBuild    []int        // start index of all // +build comments in output
+
+	inDecl    bool
+	goBuild   []int // start index of all //go:build comments in output
+	plusBuild []int // start index of all // +build comments in output
 
 	// Positions
 	// The out position differs from the pos position when the result
@@ -640,10 +642,12 @@ func (p *printer) writeComment(comment *ast.Comment) {
 
 	// shortcut common case of //-style comments
 	if text[1] == '/' {
-		if constraint.IsGoBuild(text) {
-			p.goBuild = append(p.goBuild, len(p.output))
-		} else if constraint.IsPlusBuild(text) {
-			p.plusBuild = append(p.plusBuild, len(p.output))
+		if !p.inDecl {
+			if constraint.IsGoBuild(text) {
+				p.goBuild = append(p.goBuild, len(p.output))
+			} else if constraint.IsPlusBuild(text) {
+				p.plusBuild = append(p.plusBuild, len(p.output))
+			}
 		}
 		p.writeString(pos, trimRight(text), true)
 		return

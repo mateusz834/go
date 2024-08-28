@@ -1,0 +1,14 @@
+package buildtag
+
+//go:build test
+
+import (
+	"test"
+)
+
+//go:build test2
+
+func test() {
+}
+
+//go:build test3

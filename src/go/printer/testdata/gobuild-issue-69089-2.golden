@@ -1,0 +1,6 @@
+package buildtag
+
+func test() {
+	panic("test")	//go:build go1.16
+	panic("test")
+}
