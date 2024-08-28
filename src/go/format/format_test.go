@@ -205,3 +205,12 @@ func TestBuildDirectiveFormat(t *testing.T) {
 		t.Fatal(err) // format.Node internal error (8:5: expected ';', found 0 (and 1 more errors))
 	}
 }
+
+// TODO: this is suuper weird:
+/*
+package main
+
+// +build a
+func main() {
+}
+*/
