@@ -16,6 +16,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -862,4 +863,27 @@ func TestEmptyDecl(t *testing.T) { // issue 63566
 			t.Errorf("got %q, want %q", got, want)
 		}
 	}
+}
+
+func TestGoDocFormatPackage(t *testing.T) {
+	//	const src = `//line a:1:1
+	////aa
+	//package main
+	//`
+
+	const src = `package A
+type A [C((D)),]byte
+`
+
+	fs := token.NewFileSet()
+	f, err := parser.ParseFile(fs, "test.go", src, parser.ParseComments|parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ast.Print(fs, f)
+
+	var out strings.Builder
+	Fprint(&out, fs, f)
+	t.Logf("\n%v", out.String())
 }
