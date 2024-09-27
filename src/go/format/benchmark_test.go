@@ -57,7 +57,7 @@ var tests = []struct {
 	// add new test cases here as needed
 }
 
-func BenchmarkFormat(b *testing.B) {
+func BenchmarkSource(b *testing.B) {
 	var src bytes.Buffer
 	for _, t := range tests {
 		src.Reset()

@@ -15,13 +15,14 @@
 package format
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/printer"
 	"go/token"
 	"io"
+	"slices"
 )
 
 // Keep these in sync with cmd/gofmt/gofmt.go.
@@ -67,17 +68,12 @@ func Node(dst io.Writer, fset *token.FileSet, node any) error {
 	// Sort imports if necessary.
 	if file != nil && hasUnsortedImports(file) {
 		// Make a copy of the AST because ast.SortImports is destructive.
-		// TODO(gri) Do this more efficiently.
-		var buf bytes.Buffer
-		err := config.Fprint(&buf, fset, file)
+		var err error
+		fset, file, err = cloneFileForSortImports(fset, file)
 		if err != nil {
 			return err
 		}
-		file, err = parser.ParseFile(fset, "", buf.Bytes(), parserMode)
-		if err != nil {
-			// We should never get here. If we do, provide good diagnostic.
-			return fmt.Errorf("format.Node internal error (%s)", err)
-		}
+
 		ast.SortImports(fset, file)
 
 		// Use new file with sorted imports.
@@ -88,6 +84,64 @@ func Node(dst io.Writer, fset *token.FileSet, node any) error {
 	}
 
 	return config.Fprint(dst, fset, node)
+}
+
+func cloneFileForSortImports(fset *token.FileSet, f *ast.File) (*token.FileSet, *ast.File, error) {
+	fileFromFset := fset.File(f.FileStart)
+	if fileFromFset == nil {
+		return nil, nil, errors.New("invalid *token.FileSet")
+	}
+
+	newFset := token.NewFileSet()
+	file := newFset.AddFile(fileFromFset.Name(), fileFromFset.Base(), fileFromFset.Size())
+	if !file.SetLines(slices.Clone(fileFromFset.Lines())) {
+		return nil, nil, errors.New("invalid *token.FileSet")
+	}
+
+	newComments := make([]*ast.CommentGroup, len(f.Comments))
+	for i, cg := range f.Comments {
+		commentGroup := &ast.CommentGroup{
+			List: make([]*ast.Comment, len(cg.List)),
+		}
+		for j, c := range cg.List {
+			clonedComment := *c
+			commentGroup.List[j] = &clonedComment
+		}
+		newComments[i] = commentGroup
+	}
+
+	clonedFile := *f
+	clonedFile.Comments = newComments
+	clonedFile.Decls = slices.Clone(f.Decls)
+
+	if len(clonedFile.Decls) > 0 {
+		if importDecl, ok := clonedFile.Decls[0].(*ast.GenDecl); ok && importDecl.Tok == token.IMPORT {
+			clonedImportDecl := *importDecl
+
+			if clonedImportDecl.Doc != nil {
+				clonedImportDecl.Doc = newComments[slices.Index(f.Comments, importDecl.Doc)]
+			}
+
+			clonedImportDecl.Specs = make([]ast.Spec, len(importDecl.Specs))
+			for i, v := range importDecl.Specs {
+				s, ok := v.(*ast.ImportSpec)
+				if !ok {
+					return nil, nil, fmt.Errorf("import spec contains unexpected type: %T", v)
+				}
+				clonedImportSpec := *s
+				if clonedImportSpec.Doc != nil {
+					clonedImportSpec.Doc = newComments[slices.Index(f.Comments, clonedImportSpec.Doc)]
+				}
+				if clonedImportSpec.Comment != nil {
+					clonedImportSpec.Comment = newComments[slices.Index(f.Comments, clonedImportSpec.Comment)]
+				}
+				clonedImportDecl.Specs[i] = &clonedImportSpec
+			}
+			clonedFile.Decls[0] = &clonedImportDecl
+		}
+	}
+
+	return newFset, &clonedFile, nil
 }
 
 // Source formats src in canonical gofmt style and returns the result
