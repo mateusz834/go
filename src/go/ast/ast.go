@@ -7,7 +7,9 @@
 package ast
 
 import (
+	"go/ast"
 	"go/token"
+	"slices"
 	"strings"
 )
 
@@ -1056,6 +1058,236 @@ type File struct {
 	Unresolved         []*Ident        // unresolved identifiers in this file. Deprecated: see Object
 	Comments           []*CommentGroup // list of all comments in the source file
 	GoVersion          string          // minimum Go version required by //go:build or // +build directives
+}
+
+/*
+proposal: go/token: add `(*File).LineInfos() iter.Seq[LineInfo]` iterator
+
+Currently there is no way to access the LineInfo from the `*token.File`, we can only access
+the lines, through `(*ast.File).Lines`. I propose to add to the go/token following API:
+
+```go
+type LineInfo struct {
+	Offset       int
+	Filename     string
+	Line, Column int
+}
+func (f *File) LineInfos() iter.Seq[LineInfo] {
+	return slices.Values(f.infos)
+}
+```
+
+Or the same way as currently the `(*ast.File).Lines` works:
+
+```go
+func (f *File) LineInfos() []LineInfo {
+	return f.infos
+}
+```
+
+But as we now have iterators not sure whether this approach is right.
+
+This would allow us to clone the `*ast.File` for (new proposal)
+*/
+
+/*
+proposal: go/ast: add CloneWithFset function.
+
+Currently there is no way to clone the *ast.File without printing, then parsing the source, but
+this way we are not really cloning the file, because printing formats also the source, so we
+end up with a different *ast.File. I propose to add to the go/ast following new API:
+
+```go
+// CloneWithFset creates a deep copy of the *File and returns the new *File.
+// The behavior depends on the provided FileSet values:
+//
+// 1) If both fset and newFset are nil, a deep copy of the file is created, preserving
+//    the original token.Pos values.
+//
+// 2) If both fset and newFset are non-nil, a new file is added to newFset, and the
+//    deep copy is created with all token.Pos values updated to correspond to the
+//    new file's positions.
+func (f *File) CloneWithFset(fset, newFset *token.FileSet) *File {
+	var file, newFile *ast.File
+	if fset != nil && newFile != nil {
+		file = fset.File(f.FileStart)
+		newFile = newFset.AddFile(file.Name(), file.Base(), file.Size())
+		newFile.SetLines(file.Lines())
+		// Not yet possible, proposal #
+		for _, v := range file.LineInfos() {
+			file.AddLineColumnInfo(v.Offset, v.Filename, v.Line, v.Column)
+		}
+	} else if fset == nil || newFile == nil {
+		panic("go/ast: invalid use of CloneWithFset")
+	}
+
+	updatePos := func(p token.Pos) token.Pos {
+		if newFile == nil {
+			return p
+		}
+		return newFile.Pos(file.Offset(f.Doc))
+	}
+
+	return &File{
+		Doc:     updatePos(f.Doc)
+
+		// ....
+	}
+
+```
+
+This would solve our TODO, in go/format package:
+
+https://github.com/golang/go/blob/268eaf9acbbef7555db02bd3f15bdad9a47d13fa/src/go/format/format.go#L69-L81
+
+*/
+
+func (f *File) Clone() *File {
+	return f.CloneWithFset(nil, nil)
+}
+
+func (f *File) CloneWithFset(fset, newFset *token.FileSet) *File {
+	var file, newFile *ast.File
+	if fset != nil {
+		file = fset.File(f.FileStart)
+		newFile = file
+	}
+	if newFset != nil {
+		newFile = newFset.AddFile(file.Name(), file.Base(), file.Size())
+		newFile.SetLines(file.Lines())
+		// TODO: clone line infos
+	}
+
+	fc := &fileCloner{
+		oldFile:     file,
+		newFile:     newFile,
+		oldComments: f.Comments,
+		newComments: make([]*CommentGroup, 0, len(f.Comments)),
+	}
+
+	for i, v := range f.Comments {
+		fc.newComments[i] = fc.cloneCommentGroup(v)
+	}
+
+	imports := make([]*ImportSpec, len(f.Imports))
+	for i, v := range f.Imports {
+		imports[i] = fc.cloneImportSpec(v)
+	}
+
+	return &File{
+		Doc:     fc.cloneFileComment(f.Doc),
+		Package: fc.pos(f.Package),
+		Name:    fc.cloneIdent(f.Name),
+		Decls:   fc.cloneDecls(f.Decls),
+
+		FileStart:  fc.pos(f.FileStart),
+		FileEnd:    fc.pos(f.FileEnd),
+		Scope:      nil,
+		Imports:    imports,
+		Unresolved: nil,
+		Comments:   fc.newComments,
+		GoVersion:  f.GoVersion,
+	}
+}
+
+type fileCloner struct {
+	oldFile, newFile         *token.File
+	oldComments, newComments []*CommentGroup
+}
+
+func (f *fileCloner) cloneDecls(decls []Decl) []Decl {
+	newDecls := make([]Decl, len(decls))
+	for i, v := range decls {
+		newDecls[i] = f.cloneDecl(v)
+	}
+	return newDecls
+}
+
+func (f *fileCloner) cloneDecl(d Decl) Decl {
+	switch d := d.(type) {
+	case *BadDecl:
+		return &BadDecl{
+			From: f.pos(d.From),
+			To:   f.pos(d.To),
+		}
+	case *GenDecl:
+		return &GenDecl{
+			Doc:    f.cloneFileComment(d.Doc),
+			TokPos: f.pos(d.TokPos),
+			Tok:    d.Tok,
+			Lparen: f.pos(d.Lparen),
+			Specs:  f.cloneSpecs(d.Specs),
+			Rparen: f.pos(d.Rparen),
+		}
+	case *FuncDecl:
+		return &FuncDecl{
+			Doc: f.cloneFileComment(d.Doc),
+		}
+	default:
+		panic("unreachable")
+	}
+}
+
+func (f *fileCloner) cloneSpecs(specs []Spec) []Spec {
+	return nil
+}
+
+func (f *fileCloner) cloneFileComment(c *CommentGroup) *CommentGroup {
+	i := slices.Index(f.oldComments, c)
+	if i == -1 {
+		return f.cloneCommentGroup(c)
+	}
+	return f.newComments[i]
+}
+
+func (f *fileCloner) cloneIdent(i *Ident) *Ident {
+	if i == nil {
+		return nil
+	}
+	return &Ident{
+		NamePos: f.pos(i.NamePos),
+		Name:    i.Name,
+	}
+}
+
+func (f *fileCloner) cloneBasicLit(l *BasicLit) *BasicLit {
+	if l == nil {
+		return nil
+	}
+	return &BasicLit{
+		ValuePos: f.pos(l.ValuePos),
+		Kind:     l.Kind,
+		Value:    l.Value,
+	}
+}
+
+func (f *fileCloner) cloneImportSpec(i *ImportSpec) *ImportSpec {
+	if i == nil {
+		return nil
+	}
+	return &ImportSpec{
+		Doc:     f.cloneFileComment(i.Doc),
+		Name:    f.cloneIdent(i.Name),
+		Path:    f.cloneBasicLit(i.Path),
+		Comment: f.cloneFileComment(i.Comment),
+		EndPos:  f.pos(i.EndPos),
+	}
+}
+
+func (f *fileCloner) cloneCommentGroup(c *CommentGroup) *CommentGroup {
+	if c == nil {
+		return nil
+	}
+	cg := &CommentGroup{make([]*Comment, len(c.List))}
+	for i, v := range c.List {
+		comment := &Comment{f.pos(v.Slash), v.Text}
+		cg.List[i] = comment
+	}
+	return cg
+}
+
+func (f *fileCloner) pos(pos token.Pos) token.Pos {
+	return f.newFile.Pos(f.oldFile.Offset(pos))
 }
 
 // Pos returns the position of the package declaration.

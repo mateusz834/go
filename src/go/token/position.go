@@ -7,6 +7,7 @@ package token
 import (
 	"cmp"
 	"fmt"
+	"iter"
 	"slices"
 	"strconv"
 	"sync"
@@ -264,6 +265,10 @@ func (f *File) AddLineColumnInfo(offset int, filename string, line, column int) 
 		f.infos = append(f.infos, lineInfo{offset, filename, line, column})
 	}
 	f.mutex.Unlock()
+}
+
+func (f *File) LineInfo() iter.Seq[lineInfo] {
+	return slices.Values(f.infos)
 }
 
 // fixOffset fixes an out-of-bounds offset such that 0 <= offset <= f.size.
