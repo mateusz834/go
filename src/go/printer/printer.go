@@ -12,6 +12,7 @@ import (
 	"go/token"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -742,10 +743,20 @@ func (p *printer) intersperseComments(next token.Position, tok token.Token) (wro
 		if p.lastTok != token.IMPORT && // do not rewrite cgo's import "C" comments
 			p.posFor(p.comment.Pos()).Column == 1 &&
 			p.posFor(p.comment.End()+1) == next {
+
+			packageLineDirective := strings.HasPrefix(list[0].Text, "//line ") && p.lastTok == token.PACKAGE
+			if packageLineDirective {
+				list = list[1:]
+			}
+
 			// Unindented comment abutting next token position:
 			// a top-level doc comment.
 			list = formatDocComment(list)
 			changed = true
+
+			if packageLineDirective {
+				list = slices.Insert(list, 0, p.comment.List[0])
+			}
 
 			if len(p.comment.List) > 0 && len(list) == 0 {
 				// The doc comment was removed entirely.
