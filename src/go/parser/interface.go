@@ -106,15 +106,16 @@ func ParseFile(fset *token.FileSet, filename string, src any, mode Mode) (f *ast
 			}
 		}
 
-		// set result values
-		if f == nil {
+		if f.Name == nil {
 			// source is not a valid Go source file - satisfy
 			// ParseFile API and return a valid (but) empty
 			// *ast.File
-			f = &ast.File{
-				Name:  new(ast.Ident),
-				Scope: ast.NewScope(nil),
-			}
+			f.Name = new(ast.Ident)
+			f.Scope = ast.NewScope(nil)
+		} else {
+			f.Imports = p.imports
+			f.Comments = p.comments
+			f.GoVersion = p.goVersion
 		}
 
 		// Ensure the start/end are consistent,
@@ -127,8 +128,9 @@ func ParseFile(fset *token.FileSet, filename string, src any, mode Mode) (f *ast
 	}()
 
 	// parse source
+	f = &ast.File{}
 	p.init(file, text, mode)
-	f = p.parseFile()
+	p.parseFile(f)
 
 	return
 }

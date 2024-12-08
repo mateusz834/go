@@ -2849,7 +2849,7 @@ func (p *parser) parseDecl(sync map[token.Token]bool) ast.Decl {
 // ----------------------------------------------------------------------------
 // Source files
 
-func (p *parser) parseFile() *ast.File {
+func (p *parser) parseFile(f *ast.File) {
 	if p.trace {
 		defer un(trace(p, "File"))
 	}
@@ -2857,7 +2857,7 @@ func (p *parser) parseFile() *ast.File {
 	// Don't bother parsing the rest if we had errors scanning the first token.
 	// Likely not a Go source file at all.
 	if p.errors.Len() != 0 {
-		return nil
+		return
 	}
 
 	// package clause
@@ -2874,14 +2874,17 @@ func (p *parser) parseFile() *ast.File {
 	// Don't bother parsing the rest if we had errors parsing the package clause.
 	// Likely not a Go source file at all.
 	if p.errors.Len() != 0 {
-		return nil
+		return
 	}
 
-	var decls []ast.Decl
+	f.Doc = doc
+	f.Package = pos
+	f.Name = ident
+
 	if p.mode&PackageClauseOnly == 0 {
 		// import decls
 		for p.tok == token.IMPORT {
-			decls = append(decls, p.parseGenDecl(token.IMPORT, p.parseImportSpec))
+			f.Decls = append(f.Decls, p.parseGenDecl(token.IMPORT, p.parseImportSpec))
 		}
 
 		if p.mode&ImportsOnly == 0 {
@@ -2894,21 +2897,11 @@ func (p *parser) parseFile() *ast.File {
 				}
 				prev = p.tok
 
-				decls = append(decls, p.parseDecl(declStart))
+				f.Decls = append(f.Decls, p.parseDecl(declStart))
 			}
 		}
 	}
 
-	f := &ast.File{
-		Doc:     doc,
-		Package: pos,
-		Name:    ident,
-		Decls:   decls,
-		// File{Start,End} are set by the defer in the caller.
-		Imports:   p.imports,
-		Comments:  p.comments,
-		GoVersion: p.goVersion,
-	}
 	var declErr func(token.Pos, string)
 	if p.mode&DeclarationErrors != 0 {
 		declErr = p.error
@@ -2917,7 +2910,7 @@ func (p *parser) parseFile() *ast.File {
 		resolveFile(f, p.file, declErr)
 	}
 
-	return f
+	return
 }
 
 // packIndexExpr returns an IndexExpr x[expr0] or IndexListExpr x[expr0, ...].

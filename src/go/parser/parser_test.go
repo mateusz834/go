@@ -858,3 +858,48 @@ func TestEmptyFileHasValidStartEnd(t *testing.T) {
 		}
 	}
 }
+
+func TestEarlyBailout(t *testing.T) {
+	const src = `//go:build go1.23
+package test
+
+import "fmt"
+
+// comment
+func test() { validCode() }
+
+func parseError() { var a }
+func parseError() { var a }
+func parseError() { var a }
+func parseError() { var a }
+func parseError() { var a }
+func parseError() { var a }
+func parseError() { var a }
+func parseError() { var a }
+func parseError() { var a }
+func parseError() { var a }
+func parseError() { var a } /*test*/
+func parseError() { var a }
+// comment
+func parseError() { /*comment*/ var a }
+`
+
+	fset := token.NewFileSet()
+	f, _ := ParseFile(fset, "test.go", src, SkipObjectResolution|ParseComments)
+
+	if len(f.Decls) != 13 {
+		t.Errorf("len(f.Decls) = %v; want = 13", len(f.Decls))
+	}
+
+	if len(f.Comments) != 3 {
+		t.Errorf("len(f.Comments) = %v; want = 2", len(f.Comments))
+	}
+
+	if len(f.Imports) != 1 {
+		t.Errorf("len(f.Imports) = %v; want = 1", len(f.Imports))
+	}
+
+	if f.GoVersion != "go1.23" {
+		t.Errorf("f.GoVersion = %v; want = go1.23", f.GoVersion)
+	}
+}
