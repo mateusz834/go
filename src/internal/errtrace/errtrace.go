@@ -38,6 +38,16 @@ func Get(err error) []uintptr {
 	return (*_error)(ifaceOf(&err).data).trace()
 }
 
+func New(err error) error {
+	traceErr := newError(ifaceOf(&err).data, 1)
+	traceErr.trace()[0] = callerPC()
+	return *(*error)(unsafe.Pointer(&iface{
+		tab:  ifaceOf(&err).tab,
+		data: unsafe.Pointer(traceErr),
+	}))
+}
+
+// TODO: needs to work on any interface.
 func Use(err error) error {
 	if err == nil {
 		return nil
@@ -45,20 +55,6 @@ func Use(err error) error {
 	return *(*error)(unsafe.Pointer(&iface{
 		tab:  ifaceOf(&err).tab,
 		data: (*_error)(ifaceOf(&err).data).err,
-	}))
-}
-
-func callerPC() uintptr {
-	pc, _, _, _ := runtime.Caller(2)
-	return pc
-}
-
-func New(err error) error {
-	traceErr := newError(ifaceOf(&err).data, 1)
-	traceErr.trace()[0] = callerPC()
-	return *(*error)(unsafe.Pointer(&iface{
-		tab:  ifaceOf(&err).tab,
-		data: unsafe.Pointer(traceErr),
 	}))
 }
 
@@ -81,6 +77,11 @@ func Move(err error) error {
 		tab:  ifaceOf(&err).tab,
 		data: unsafe.Pointer(e0),
 	}))
+}
+
+func callerPC() uintptr {
+	pc, _, _, _ := runtime.Caller(2)
+	return pc
 }
 
 type iface struct {
