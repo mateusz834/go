@@ -50,6 +50,7 @@ func checkFiles(m posMap, noders []*noder) (*types2.Package, *types2.Info, map[*
 		ctxt:     ctxt,
 		packages: make(map[string]*types2.Package),
 	}
+
 	conf := types2.Config{
 		Context:            ctxt,
 		GoVersion:          base.Flag.Lang,
@@ -91,7 +92,6 @@ func checkFiles(m posMap, noders []*noder) (*types2.Package, *types2.Info, map[*
 		}
 		base.ErrorfAt(m.makeXPos(terr.Pos), terr.Code, "%s", msg)
 	}
-
 	pkg, err := conf.Check(base.Ctxt.Pkgpath, files, info)
 	base.ExitIfErrors()
 	if err != nil {
@@ -171,6 +171,57 @@ func checkFiles(m posMap, noders []*noder) (*types2.Package, *types2.Info, map[*
 		}
 	}
 	base.ExitIfErrors()
+
+	var nopos syntax.Pos
+	// runtimePkg is a fake runtime package that contains what we need to refer to in package runtime.
+	var runtimePkg = func() *types2.Package {
+		pkg := types2.NewPackage("internal/errtrace", "errtrace")
+		errorType := types2.Universe.Lookup("error").Type()
+
+		obj := types2.NewFunc(nopos, pkg, "Use", types2.NewSignatureType(nil, nil, nil,
+			types2.NewTuple(types2.NewParam(nopos, pkg, "e", errorType)),
+			types2.NewTuple(types2.NewParam(nopos, pkg, "e", errorType)),
+			false,
+		))
+		pkg.Scope().Insert(obj)
+
+		return pkg
+	}()
+
+	// runtimeSym returns a reference to a symbol in the fake runtime package.
+	runtimeSym := func(info *types2.Info, name string) *syntax.Name {
+		obj := runtimePkg.Scope().Lookup(name)
+		n := syntax.NewName(nopos, "errtrace."+name)
+		tv := syntax.TypeAndValue{Type: obj.Type()}
+		tv.SetIsValue()
+		tv.SetIsRuntimeHelper()
+		n.SetTypeInfo(tv)
+		info.Uses[n] = obj
+		return n
+	}
+
+	if buildcfg.Experiment.ErrorTraces {
+		for _, f := range files {
+			syntax.Inspect(f, func(n syntax.Node) bool {
+				switch n := n.(type) {
+				case *syntax.AssignStmt:
+					if n.Rhs != nil {
+						if types2.Identical(n.Rhs.GetTypeInfo().Type, types2.Universe.Lookup("error").Type()) {
+							call := &syntax.CallExpr{
+								Fun:     runtimeSym(info, "Use"),
+								ArgList: []syntax.Expr{n.Rhs},
+							}
+							tv := syntax.TypeAndValue{Type: types2.Universe.Lookup("error").Type()}
+							tv.SetIsValue()
+							call.SetTypeInfo(tv)
+							n.Rhs = call
+						}
+					}
+				}
+				return true
+			})
+		}
+	}
 
 	// Rewrite range over function to explicit function calls
 	// with the loop bodies converted into new implicit closures.

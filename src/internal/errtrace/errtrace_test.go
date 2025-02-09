@@ -9,8 +9,15 @@ func (e *err) Error() string {
 }
 
 func TestErrorTrace(t *testing.T) {
-	e := NewErrorTrace(new(err))
-	e = ErrTraceMove(e)
-	e = ErrTraceMove(e)
-	t.Log(GetTrace(e))
+	var er err
+	e := New(&er)
+
+	e = Move(e)
+	e = Move(e)
+	e = Move(e)
+	e = Move(e)
+
+	v, ok := Use(e).(*err)
+	t.Logf("%p %v", v, ok)
+	t.Logf("%p %v", &er, ok)
 }

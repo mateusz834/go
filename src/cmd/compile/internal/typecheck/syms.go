@@ -132,3 +132,32 @@ func LookupCoverage(name string) *ir.Name {
 	}
 	return sym.Def.(*ir.Name)
 }
+
+// InitCoverage loads the definitions for routines called
+// by code coverage instrumentation (similar to InitRuntime above).
+func InitErrtrace() {
+	typs := errtraceTypes()
+	for _, d := range &errtraceDecls {
+		sym := ir.Pkgs.Errtrace.Lookup(d.name)
+		typ := typs[d.typ]
+		switch d.tag {
+		case funcTag:
+			importfunc(sym, typ)
+		case varTag:
+			importvar(sym, typ)
+		default:
+			base.Fatalf("unhandled declaration tag %v", d.tag)
+		}
+	}
+}
+
+// LookupCoverage looks up the Go function 'name' in package
+// runtime/coverage. This function must follow the internal calling
+// convention.
+func LookupErrtrace(name string) *ir.Name {
+	sym := ir.Pkgs.Errtrace.Lookup(name)
+	if sym == nil || sym.Def == nil {
+		base.Fatalf("LookupErrtrace: can't find internal/errtrace.%s", name)
+	}
+	return sym.Def.(*ir.Name)
+}

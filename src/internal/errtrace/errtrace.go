@@ -2,73 +2,124 @@ package errtrace
 
 import (
 	"internal/abi"
-	"internal/goarch"
 	"runtime"
 	"sync"
 	"unsafe"
 )
 
-type TraceError[T error] struct {
+// TODO: add an internal error type for: fmt.Errorf("%v", err), so that it also preserves the error trace (implicit unwrap).
+
+// TODO: remove.
+type Error[T any] struct {
 	err   T
 	trace []uintptr
 }
 
-func GetTrace(e error) []uintptr {
+type Err struct {
+	err         unsafe.Pointer
+	traceLength uintptr
+
+	// trace [traceLength]uintptr
+}
+
+// TODO: remove.
+var traceErrTypes sync.Map // map[abi.TypeOf(T)]abi.TypeOf(Error[T])
+
+func Get(e error) []uintptr {
+	if e == nil {
+		return nil
+	}
+	typ := ifaceOf(&e).tab.Type
+	data := ifaceOf(&e).data
+
+	traceErrTypeAny, ok := traceErrTypes.Load(typ)
+	if !ok {
+		panic("internal/errtrace: internal error")
+	}
+	traceErrType := traceErrTypeAny.(*abi.Type)
+
+	if traceErrType.Kind_&abi.KindMask != abi.Struct {
+		panic("internal/errtrace: internal error")
+	}
+
+	st := (*abi.StructType)(unsafe.Pointer(traceErrType))
+	if len(st.Fields) != 2 {
+		panic("internal/errtrace: internal error")
+	}
+
+	return *(*[]uintptr)(unsafe.Add(data, st.Fields[1].Offset))
+}
+
+// TODO
+//func test() {
+//	// TODO: every interface use would need an Use? Without interface to interface conversion.
+//	var e error
+//	e = fmt.Errorf("test %w", e)
+//	_ = e
+//}
+
+// TODO: should work for all interfaces.
+func Use(e error) error {
 	if e == nil {
 		return nil
 	}
 
-	// TODO: make sure that error is a traceError[T], otherwise skip (i.e. return e).
-
+	itab := ifaceOf(&e).tab
 	data := ifaceOf(&e).data
 
-	return *(*[]uintptr)(unsafe.Add(data, goarch.PtrSize))
+	if itab.Type.IsDirectIface() {
+		return *(*error)(unsafe.Pointer(&iface{
+			tab:  itab,
+			data: (*Error[unsafe.Pointer])(data).err,
+		}))
+	}
+
+	return e
 }
 
-var traceErrTypes sync.Map // map[abi.TypeOf(T)]abi.TypeOf(TraceError[T])
-
-func NewErrorTrace[T error](e T) error {
+func New[T error](e T) error {
 	var err error = e
-	typ := ifaceOf(&err).tab.Type
-	data := ifaceOf(&err).data
-
-	newData := newobject(typ)
-	typedmemmove(typ, newData, data)
-
-	var te any = TraceError[T]{}
-	traceErrTypes.Store(typ, efaceOf(&te)._type)
-
+	traceErrTypes.Store(abi.TypeFor[T](), abi.TypeFor[Error[T]]())
 	return *(*error)(unsafe.Pointer(&iface{
 		tab:  ifaceOf(&err).tab,
-		data: data,
+		data: unsafe.Pointer(&Error[T]{err: e}),
 	}))
 }
 
-func ErrTraceMove(e error) error {
+func Move(e error) error {
 	if e == nil {
 		return nil
 	}
-
-	// TODO: make sure that error is a traceError[T], otherwise skip (i.e. return e).
 
 	typ := ifaceOf(&e).tab.Type
 	data := ifaceOf(&e).data
 
-	if typ == nil {
-		panic("her")
-	}
-
-	traceErrType, ok := traceErrTypes.Load(typ)
+	traceErrTypeAny, ok := traceErrTypes.Load(typ)
 	if !ok {
 		panic("internal/errtrace: internal error")
 	}
+	traceErrType := traceErrTypeAny.(*abi.Type)
 
-	newData := newobject(traceErrType.(*abi.Type))
-	typedmemmove(typ, newData, data)
+	newData := newobject(traceErrType)
+	typedmemmove(traceErrType, newData, data)
 
-	// TODO: find offset through type.
-	trace := (*[]uintptr)(unsafe.Add(newData, goarch.PtrSize))
+	if traceErrType.Kind_&abi.KindMask != abi.Struct {
+		panic("internal/errtrace: internal error")
+	}
 
+	st := (*abi.StructType)(unsafe.Pointer(traceErrType))
+	if len(st.Fields) != 2 {
+		panic("internal/errtrace: internal error")
+	}
+
+	trace := (*[]uintptr)(unsafe.Add(newData, st.Fields[1].Offset))
+
+	// TODO: add an sentinel pc??
+	if len(*trace) >= 256 {
+		return e
+	}
+
+	// TODO: if ok is false, add an sentinel pc??
 	pc, _, _, _ := runtime.Caller(1)
 	*trace = append((*trace)[:len(*trace)], pc)
 

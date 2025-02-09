@@ -124,4 +124,7 @@ type Flags struct {
 
 	// Synctest enables the testing/synctest package.
 	Synctest bool
+
+	// TODO: go to references does not work.
+	ErrorTraces bool
 }
