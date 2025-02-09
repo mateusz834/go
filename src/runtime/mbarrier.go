@@ -236,6 +236,11 @@ func maps_typedmemmove(typ *_type, dst, src unsafe.Pointer) {
 	typedmemmove(typ, dst, src)
 }
 
+//go:linkname errtrace_typedmemmove internal/errtrace.typedmemmove
+func errtrace_typedmemmove(typ *_type, dst, src unsafe.Pointer) {
+	typedmemmove(typ, dst, src)
+}
+
 // reflectcallmove is invoked by reflectcall to copy the return values
 // out of the stack and into the heap, invoking the necessary write
 // barriers. dst, src, and size describe the return value area to
