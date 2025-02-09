@@ -3,139 +3,84 @@ package errtrace
 import (
 	"internal/abi"
 	"runtime"
-	"sync"
 	"unsafe"
 )
 
 // TODO: add an internal error type for: fmt.Errorf("%v", err), so that it also preserves the error trace (implicit unwrap).
 
-// TODO: remove.
-type Error[T any] struct {
-	err   T
-	trace []uintptr
-}
-
-type Err struct {
+type _error struct {
 	err         unsafe.Pointer
 	traceLength uintptr
-
 	// trace [traceLength]uintptr
 }
 
-// TODO: remove.
-var traceErrTypes sync.Map // map[abi.TypeOf(T)]abi.TypeOf(Error[T])
-
-func Get(e error) []uintptr {
-	if e == nil {
-		return nil
-	}
-	typ := ifaceOf(&e).tab.Type
-	data := ifaceOf(&e).data
-
-	traceErrTypeAny, ok := traceErrTypes.Load(typ)
-	if !ok {
-		panic("internal/errtrace: internal error")
-	}
-	traceErrType := traceErrTypeAny.(*abi.Type)
-
-	if traceErrType.Kind_&abi.KindMask != abi.Struct {
-		panic("internal/errtrace: internal error")
-	}
-
-	st := (*abi.StructType)(unsafe.Pointer(traceErrType))
-	if len(st.Fields) != 2 {
-		panic("internal/errtrace: internal error")
-	}
-
-	return *(*[]uintptr)(unsafe.Add(data, st.Fields[1].Offset))
+func (e *_error) trace() []uintptr {
+	return unsafe.Slice(
+		(*uintptr)(unsafe.Pointer(unsafe.Add(
+			unsafe.Pointer(e),
+			unsafe.Offsetof(e.traceLength)+unsafe.Sizeof(e.traceLength),
+		))),
+		e.traceLength,
+	)
 }
 
-// TODO
-//func test() {
-//	// TODO: every interface use would need an Use? Without interface to interface conversion.
-//	var e error
-//	e = fmt.Errorf("test %w", e)
-//	_ = e
-//}
-
-// TODO: should work for all interfaces.
-func Use(e error) error {
-	if e == nil {
-		return nil
-	}
-
-	itab := ifaceOf(&e).tab
-	data := ifaceOf(&e).data
-
-	if itab.Type.IsDirectIface() {
-		return *(*error)(unsafe.Pointer(&iface{
-			tab:  itab,
-			data: (*Error[unsafe.Pointer])(data).err,
-		}))
-	}
-
+func newError(err unsafe.Pointer, traceLength uintptr) *_error {
+	e := (*_error)(mallocgc(unsafe.Sizeof(_error{})+(traceLength*unsafe.Sizeof(uintptr(0))), abi.TypeFor[_error]()))
+	e.err = err
+	e.traceLength = traceLength
 	return e
 }
 
-func New[T error](e T) error {
-	var err error = e
-	traceErrTypes.Store(abi.TypeFor[T](), abi.TypeFor[Error[T]]())
+func Get(err error) []uintptr {
+	if err == nil {
+		return nil
+	}
+	return (*_error)(ifaceOf(&err).data).trace()
+}
+
+func Use(err error) error {
+	if err == nil {
+		return nil
+	}
 	return *(*error)(unsafe.Pointer(&iface{
 		tab:  ifaceOf(&err).tab,
-		data: unsafe.Pointer(&Error[T]{err: e}),
+		data: (*_error)(ifaceOf(&err).data).err,
 	}))
 }
 
-func Move(e error) error {
-	if e == nil {
+func callerPC() uintptr {
+	pc, _, _, _ := runtime.Caller(2)
+	return pc
+}
+
+func New(err error) error {
+	traceErr := newError(ifaceOf(&err).data, 1)
+	traceErr.trace()[0] = callerPC()
+	return *(*error)(unsafe.Pointer(&iface{
+		tab:  ifaceOf(&err).tab,
+		data: unsafe.Pointer(traceErr),
+	}))
+}
+
+func Move(err error) error {
+	if err == nil {
 		return nil
 	}
 
-	typ := ifaceOf(&e).tab.Type
-	data := ifaceOf(&e).data
-
-	traceErrTypeAny, ok := traceErrTypes.Load(typ)
-	if !ok {
-		panic("internal/errtrace: internal error")
-	}
-	traceErrType := traceErrTypeAny.(*abi.Type)
-
-	newData := newobject(traceErrType)
-	typedmemmove(traceErrType, newData, data)
-
-	if traceErrType.Kind_&abi.KindMask != abi.Struct {
-		panic("internal/errtrace: internal error")
+	e := (*_error)(ifaceOf(&err).data)
+	// TODO: add sentinel error, that trace is truncated.
+	if e.traceLength >= 256 {
+		return err
 	}
 
-	st := (*abi.StructType)(unsafe.Pointer(traceErrType))
-	if len(st.Fields) != 2 {
-		panic("internal/errtrace: internal error")
-	}
-
-	trace := (*[]uintptr)(unsafe.Add(newData, st.Fields[1].Offset))
-
-	// TODO: add an sentinel pc??
-	if len(*trace) >= 256 {
-		return e
-	}
-
-	// TODO: if ok is false, add an sentinel pc??
-	pc, _, _, _ := runtime.Caller(1)
-	*trace = append((*trace)[:len(*trace)], pc)
+	e0 := newError(e.err, e.traceLength+1)
+	copy(e0.trace(), e.trace())
+	e0.trace()[len(e0.trace())-1] = callerPC()
 
 	return *(*error)(unsafe.Pointer(&iface{
-		tab:  ifaceOf(&e).tab,
-		data: newData,
+		tab:  ifaceOf(&err).tab,
+		data: unsafe.Pointer(e0),
 	}))
-}
-
-type eface struct {
-	_type *abi.Type
-	data  unsafe.Pointer
-}
-
-func efaceOf(ep *any) *eface {
-	return (*eface)(unsafe.Pointer(ep))
 }
 
 type iface struct {
@@ -146,6 +91,9 @@ type iface struct {
 func ifaceOf[T any](ep *T) *iface {
 	return (*iface)(unsafe.Pointer(ep))
 }
+
+//go:linkname mallocgc
+func mallocgc(size uintptr, typ *abi.Type) unsafe.Pointer
 
 //go:linkname typedmemmove
 func typedmemmove(typ *abi.Type, dst, src unsafe.Pointer)

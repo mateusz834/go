@@ -58,7 +58,6 @@ func params(tlist ...*types.Type) []*types.Field {
 
 	mkbuiltin(&b, "runtime")
 	mkbuiltin(&b, "coverage")
-	mkbuiltin(&b, "errtrace")
 
 	var err error
 	out := b.Bytes()

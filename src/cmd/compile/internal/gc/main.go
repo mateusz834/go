@@ -122,9 +122,6 @@ func Main(archInit func(*ssagen.ArchInfo)) {
 	ir.Pkgs.Coverage = types.NewPkg("go.coverage", "runtime/coverage")
 	ir.Pkgs.Coverage.Prefix = "runtime/coverage"
 
-	ir.Pkgs.Errtrace = types.NewPkg("internal/errtrace", "errtrace")
-	ir.Pkgs.Errtrace.Prefix = "runtime/errtrace"
-
 	// Record flags that affect the build result. (And don't
 	// record flags that don't, since that would cause spurious
 	// changes in the binary.)
@@ -205,7 +202,6 @@ func Main(archInit func(*ssagen.ArchInfo)) {
 
 	typecheck.InitUniverse()
 	typecheck.InitRuntime()
-	typecheck.InitErrtrace()
 	rttype.Init()
 
 	// Parse and typecheck input.

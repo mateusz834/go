@@ -701,9 +701,6 @@ func (pr *pkgReader) objIdxMayFail(idx index, implicits, explicits []*types.Type
 		if sym.Pkg.Path == "runtime" {
 			return typecheck.LookupRuntime(sym.Name), nil
 		}
-		if sym.Pkg.Path == "internal/errtrace" {
-			return typecheck.LookupErrtrace(sym.Name), nil
-		}
 		base.Fatalf("unresolved stub: %v", sym)
 	}
 

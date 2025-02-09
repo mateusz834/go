@@ -16,6 +16,8 @@ func TestErrorTrace(t *testing.T) {
 	e = Move(e)
 	e = Move(e)
 	e = Move(e)
+	t.Log(Get(e))
+	t.Log(e.Error())
 
 	v, ok := Use(e).(*err)
 	t.Logf("%p %v", v, ok)

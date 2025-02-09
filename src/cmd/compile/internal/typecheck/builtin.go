@@ -425,19 +425,3 @@ func coverageTypes() []*types.Type {
 	typs[1] = newSig(params(typs[0]), nil)
 	return typs[:]
 }
-
-var errtraceDecls = [...]struct {
-	name string
-	tag  int
-	typ  int
-}{
-	{"Use", funcTag, 1},
-}
-
-func errtraceTypes() []*types.Type {
-	var typs [2]*types.Type
-	// TODO: changed from generated:
-	typs[0] = types.ErrorType
-	typs[1] = newSig(params(typs[0]), params(typs[0]))
-	return typs[:]
-}

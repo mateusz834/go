@@ -1092,6 +1092,11 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
 	return x
 }
 
+//go:linkname errtrace_mallocgc internal/errtrace.mallocgc
+func errtrace_mallocgc(size uintptr, typ *_type) unsafe.Pointer {
+	return mallocgc(size, typ, true)
+}
+
 func mallocgcTiny(size uintptr, typ *_type, needzero bool) (unsafe.Pointer, uintptr) {
 	// Set mp.mallocing to keep from being preempted by GC.
 	mp := acquirem()

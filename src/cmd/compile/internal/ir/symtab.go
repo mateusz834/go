@@ -81,5 +81,4 @@ var Pkgs struct {
 	Runtime      *types.Pkg
 	InternalMaps *types.Pkg
 	Coverage     *types.Pkg
-	Errtrace     *types.Pkg
 }
