@@ -35,7 +35,8 @@ func NewErrorTrace[T error](e T) error {
 	newData := newobject(typ)
 	typedmemmove(typ, newData, data)
 
-	traceErrTypes.Store(typ, ifaceOf(new(TraceError[T])).tab.Type)
+	var te any = TraceError[T]{}
+	traceErrTypes.Store(typ, efaceOf(&te)._type)
 
 	return *(*error)(unsafe.Pointer(&iface{
 		tab:  ifaceOf(&err).tab,
@@ -75,6 +76,15 @@ func ErrTraceMove(e error) error {
 		tab:  ifaceOf(&e).tab,
 		data: newData,
 	}))
+}
+
+type eface struct {
+	_type *abi.Type
+	data  unsafe.Pointer
+}
+
+func efaceOf(ep *any) *eface {
+	return (*eface)(unsafe.Pointer(ep))
 }
 
 type iface struct {
