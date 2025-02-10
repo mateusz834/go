@@ -19,7 +19,13 @@ func TestErrorTrace(t *testing.T) {
 	t.Log(Get(e))
 	t.Log(e.Error())
 
+	a(&e)
+
 	v, ok := Use(e).(*err)
 	t.Logf("%p %v", v, ok)
 	t.Logf("%p %v", &er, ok)
+}
+
+func a(t *error) error {
+	return *t
 }

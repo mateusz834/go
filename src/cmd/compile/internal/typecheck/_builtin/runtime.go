@@ -296,3 +296,8 @@ var loong64HasLAM_BH bool
 var loong64HasLSX bool
 
 func asanregisterglobals(unsafe.Pointer, uintptr)
+
+func errTraceGet(err error) []uintptr
+func errTraceNew(err error) error
+func errTraceUse(err error) error
+func errTraceMove(err error) error

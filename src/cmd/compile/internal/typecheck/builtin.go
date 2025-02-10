@@ -243,10 +243,14 @@ var runtimeDecls = [...]struct {
 	{"loong64HasLAM_BH", varTag, 6},
 	{"loong64HasLSX", varTag, 6},
 	{"asanregisterglobals", funcTag, 130},
+	{"errTraceGet", funcTag, 163},
+	{"errTraceNew", funcTag, 164},
+	{"errTraceUse", funcTag, 164},
+	{"errTraceMove", funcTag, 164},
 }
 
 func runtimeTypes() []*types.Type {
-	var typs [161]*types.Type
+	var typs [165]*types.Type
 	typs[0] = types.ByteType
 	typs[1] = types.NewPtr(typs[0])
 	typs[2] = types.Types[types.TANY]
@@ -408,6 +412,10 @@ func runtimeTypes() []*types.Type {
 	typs[158] = newSig(params(typs[28], typs[28], typs[17]), nil)
 	typs[159] = types.NewArray(typs[0], 16)
 	typs[160] = newSig(params(typs[7], typs[65], typs[159], typs[28], typs[15], typs[69], typs[69]), params(typs[65]))
+	typs[161] = types.ErrorType // TODO: edited manually
+	typs[162] = types.NewSlice(typs[5])
+	typs[163] = newSig(params(typs[161]), params(typs[162]))
+	typs[164] = newSig(params(typs[161]), params(typs[161]))
 	return typs[:]
 }
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"internal/buildcfg"
 	"internal/types/errors"
+	"os"
 	"regexp"
 	"sort"
 
@@ -172,54 +173,138 @@ func checkFiles(m posMap, noders []*noder) (*types2.Package, *types2.Info, map[*
 	}
 	base.ExitIfErrors()
 
-	var nopos syntax.Pos
-	// runtimePkg is a fake runtime package that contains what we need to refer to in package runtime.
-	var runtimePkg = func() *types2.Package {
-		pkg := types2.NewPackage("internal/errtrace", "errtrace")
-		errorType := types2.Universe.Lookup("error").Type()
-
-		obj := types2.NewFunc(nopos, pkg, "Use", types2.NewSignatureType(nil, nil, nil,
-			types2.NewTuple(types2.NewParam(nopos, pkg, "e", errorType)),
-			types2.NewTuple(types2.NewParam(nopos, pkg, "e", errorType)),
-			false,
-		))
-		pkg.Scope().Insert(obj)
-
-		return pkg
-	}()
-
-	// runtimeSym returns a reference to a symbol in the fake runtime package.
-	runtimeSym := func(info *types2.Info, name string) *syntax.Name {
-		obj := runtimePkg.Scope().Lookup(name)
-		n := syntax.NewName(nopos, "errtrace."+name)
-		tv := syntax.TypeAndValue{Type: obj.Type()}
-		tv.SetIsValue()
-		tv.SetIsRuntimeHelper()
-		n.SetTypeInfo(tv)
-		info.Uses[n] = obj
-		return n
-	}
-
 	if buildcfg.Experiment.ErrorTraces {
+		var nopos syntax.Pos
+		// runtimePkg is a fake runtime package that contains what we need to refer to in package runtime.
+		var runtimePkg = func() *types2.Package {
+			pkg := types2.NewPackage("runtime", "runtime")
+			errorType := types2.Universe.Lookup("error").Type()
+
+			pkg.Scope().Insert(types2.NewFunc(nopos, pkg, "errTraceNew", types2.NewSignatureType(nil, nil, nil,
+				types2.NewTuple(types2.NewParam(nopos, pkg, "e", errorType)),
+				types2.NewTuple(types2.NewParam(nopos, pkg, "e", errorType)),
+				false,
+			)))
+			pkg.Scope().Insert(types2.NewFunc(nopos, pkg, "errTraceMove", types2.NewSignatureType(nil, nil, nil,
+				types2.NewTuple(types2.NewParam(nopos, pkg, "e", errorType)),
+				types2.NewTuple(types2.NewParam(nopos, pkg, "e", errorType)),
+				false,
+			)))
+			return pkg
+		}()
+
+		// runtimeSym returns a reference to a symbol in the fake runtime package.
+		runtimeSym := func(info *types2.Info, name string) *syntax.Name {
+			obj := runtimePkg.Scope().Lookup(name)
+			n := syntax.NewName(nopos, "runtime."+name)
+			tv := syntax.TypeAndValue{Type: obj.Type()}
+			tv.SetIsValue()
+			tv.SetIsRuntimeHelper()
+			n.SetTypeInfo(tv)
+			info.Uses[n] = obj
+			return n
+		}
+
+		typError := types2.Universe.Lookup("error").Type()
 		for _, f := range files {
-			syntax.Inspect(f, func(n syntax.Node) bool {
-				switch n := n.(type) {
-				case *syntax.AssignStmt:
-					if n.Rhs != nil {
-						if types2.Identical(n.Rhs.GetTypeInfo().Type, types2.Universe.Lookup("error").Type()) {
-							call := &syntax.CallExpr{
-								Fun:     runtimeSym(info, "Use"),
-								ArgList: []syntax.Expr{n.Rhs},
-							}
-							tv := syntax.TypeAndValue{Type: types2.Universe.Lookup("error").Type()}
-							tv.SetIsValue()
-							call.SetTypeInfo(tv)
-							n.Rhs = call
+			if f.PkgName.Value == "main" {
+				var inspect func(n syntax.Node) bool
+				inspect = func(n syntax.Node) bool {
+					switch n := n.(type) {
+					case *syntax.AssignStmt:
+						if n.Lhs != nil {
+							syntax.Inspect(n.Lhs, inspect)
 						}
+						if n.Rhs != nil {
+							syntax.Inspect(n.Rhs, inspect)
+						}
+
+						if n.Rhs != nil {
+							if types2.Identical(n.Rhs.GetTypeInfo().Type, typError) {
+								call := &syntax.CallExpr{
+									Fun:     runtimeSym(info, "errTraceMove"),
+									ArgList: []syntax.Expr{n.Rhs},
+								}
+								tv := syntax.TypeAndValue{Type: typError}
+								tv.SetIsValue()
+								call.SetTypeInfo(tv)
+								n.Rhs = call
+							} else if types2.Identical(n.Lhs.GetTypeInfo().Type, typError) {
+								if types2.Satisfies(n.Rhs.GetTypeInfo().Type, typError.Underlying().(*types2.Interface)) {
+									call := &syntax.CallExpr{
+										Fun:     runtimeSym(info, "errTraceNew"),
+										ArgList: []syntax.Expr{n.Rhs},
+									}
+									tv := syntax.TypeAndValue{Type: typError}
+									tv.SetIsValue()
+									call.SetTypeInfo(tv)
+									n.Rhs = call
+								}
+							}
+						}
+					case *syntax.VarDecl:
+						if n.Type != nil {
+							syntax.Inspect(n.Type, inspect)
+						}
+						if n.Values != nil {
+							syntax.Inspect(n.Values, inspect)
+						}
+
+						if n.Values != nil && n.Type != nil {
+							if types2.Identical(n.Values.GetTypeInfo().Type, typError) {
+								call := &syntax.CallExpr{
+									Fun:     runtimeSym(info, "errTraceMove"),
+									ArgList: []syntax.Expr{n.Values},
+								}
+								tv := syntax.TypeAndValue{Type: typError}
+								tv.SetIsValue()
+								call.SetTypeInfo(tv)
+								n.Values = call
+							} else if types2.Identical(n.Type.GetTypeInfo().Type, typError) {
+								if types2.Satisfies(n.Values.GetTypeInfo().Type, typError.Underlying().(*types2.Interface)) {
+									call := &syntax.CallExpr{
+										Fun:     runtimeSym(info, "errTraceNew"),
+										ArgList: []syntax.Expr{n.Values},
+									}
+									tv := syntax.TypeAndValue{Type: typError}
+									tv.SetIsValue()
+									call.SetTypeInfo(tv)
+									n.Values = call
+								}
+							}
+						}
+					case *syntax.CallExpr:
+						syntax.Inspect(n.Fun, inspect)
+						for _, v := range n.ArgList {
+							syntax.Inspect(v, inspect)
+						}
+
+						sig, ok := n.Fun.GetTypeInfo().Type.(*types2.Signature)
+						if !ok {
+							return false
+						}
+						for i := range sig.Params().Len() {
+							param := sig.Params().At(i)
+							if types2.Identical(param.Type(), typError) {
+								call := &syntax.CallExpr{
+									Fun:     runtimeSym(info, "errTraceMove"),
+									ArgList: []syntax.Expr{n.ArgList[i]},
+								}
+								tv := syntax.TypeAndValue{Type: typError}
+								tv.SetIsValue()
+								call.SetTypeInfo(tv)
+								n.ArgList[i] = call
+							}
+						}
+					default:
+						return true
 					}
+					return false
 				}
-				return true
-			})
+				syntax.Inspect(f, inspect)
+
+				syntax.Fdump(os.Stderr, f)
+			}
 		}
 	}
 
