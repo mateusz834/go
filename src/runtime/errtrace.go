@@ -28,7 +28,6 @@ func newError(err unsafe.Pointer, traceLength uintptr) *traceError {
 	return e
 }
 
-//go:linkname errTraceGet
 func errTraceGet(err error) []uintptr {
 	if err == nil {
 		return nil
@@ -36,7 +35,6 @@ func errTraceGet(err error) []uintptr {
 	return (*traceError)(ifaceOf(&err).data).trace()
 }
 
-//go:linkname errTraceNew
 func errTraceNew(err error) error {
 	fatal("errTraceNew")
 	traceErr := newError(ifaceOf(&err).data, 1)

@@ -179,7 +179,6 @@ func checkFiles(m posMap, noders []*noder) (*types2.Package, *types2.Info, map[*
 		var runtimePkg = func() *types2.Package {
 			pkg := types2.NewPackage("runtime", "runtime")
 			errorType := types2.Universe.Lookup("error").Type()
-
 			pkg.Scope().Insert(types2.NewFunc(nopos, pkg, "errTraceNew", types2.NewSignatureType(nil, nil, nil,
 				types2.NewTuple(types2.NewParam(nopos, pkg, "e", errorType)),
 				types2.NewTuple(types2.NewParam(nopos, pkg, "e", errorType)),
@@ -285,6 +284,7 @@ func checkFiles(m posMap, noders []*noder) (*types2.Package, *types2.Info, map[*
 						}
 						for i := range sig.Params().Len() {
 							param := sig.Params().At(i)
+							// TODO: there can also exist a errTraceNew.
 							if types2.Identical(param.Type(), typError) {
 								call := &syntax.CallExpr{
 									Fun:     runtimeSym(info, "errTraceMove"),
