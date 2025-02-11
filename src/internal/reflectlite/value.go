@@ -66,15 +66,15 @@ type Value struct {
 type flag uintptr
 
 const (
-	flagKindWidth        = 5 // there are 27 kinds
-	flagKindMask    flag = 1<<flagKindWidth - 1
-	flagStickyRO    flag = 1 << 5
-	flagEmbedRO     flag = 1 << 6
-	flagIndir       flag = 1 << 7
-	flagAddr        flag = 1 << 8
-	flagMethod      flag = 1 << 9
-	flagMethodShift      = 10
-	flagRO          flag = flagStickyRO | flagEmbedRO
+	flagKindMask    flag = 1<<6 - 1
+	flagKindHasElem flag = 1 << 5
+
+	flagStickyRO flag = 1 << 6
+	flagEmbedRO  flag = 1 << 7
+	flagIndir    flag = 1 << 8
+	flagAddr     flag = 1 << 9
+	flagMethod   flag = 1 << 10
+	flagRO       flag = flagStickyRO | flagEmbedRO
 )
 
 func (f flag) kind() Kind {

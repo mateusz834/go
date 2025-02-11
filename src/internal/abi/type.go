@@ -66,22 +66,27 @@ const (
 	Float64
 	Complex64
 	Complex128
-	Array
-	Chan
 	Func
 	Interface
-	Map
-	Pointer
-	Slice
 	String
 	Struct
 	UnsafePointer
 )
 
 const (
-	// TODO (khr, drchase) why aren't these in TFlag?  Investigate, fix if possible.
-	KindDirectIface Kind = 1 << 5
-	KindMask        Kind = (1 << 5) - 1
+	Array Kind = iota | KindHasElem
+	Chan
+	Map
+	Pointer
+	Slice
+)
+
+const (
+	// TODO (khr, drchase) why KindDirectIface is not in TFlag?  Investigate, fix if possible.
+	KindDirectIface Kind = 1 << 6
+
+	KindHasElem Kind = 1 << 5 // TFlagHasElem bit signals that the a Type has an Elem.
+	KindMask    Kind = (1 << 6) - 1
 )
 
 // TFlag is used by a Type to signal what extra type information is
@@ -125,9 +130,6 @@ const (
 	// has type **byte instead of *byte. The runtime will store a
 	// pointer to the GC pointer bitmask in *GCData.
 	TFlagGCMaskOnDemand TFlag = 1 << 4
-
-	// TFlagHasElem signals that the a Type has an Elem.
-	TFlagHasElem TFlag = 1 << 5
 )
 
 // NameOff is the offset to a name from moduledata.types.  See resolveNameOff in runtime.
@@ -393,7 +395,7 @@ const elemOffset = unsafe.Offsetof(ArrayType{}.Elem)
 
 // Elem returns the element type for t if t is an array, channel, map, pointer, or slice, otherwise nil.
 func (t *Type) Elem() (out *Type) {
-	if t.TFlag&TFlagHasElem != 0 {
+	if t.Kind_&KindHasElem != 0 {
 		return *(**Type)(unsafe.Add(unsafe.Pointer(t), elemOffset))
 	}
 	return nil
