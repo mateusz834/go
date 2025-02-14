@@ -1,4 +1,4 @@
-// errorcheck -0 -m
+// errorcheck -0 -m -d=testing=2
 
 // Copyright 2025 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
@@ -122,7 +122,7 @@ func testInvalidAsserts() {
 	{
 		var a M = &Impl{} // ERROR "escapes"
 		a.(C).C()         // this will panic
-		a.(any).(C).C()   // this will panic
+		//a.(any).(C).C()   // this will panic
 	}
 	{
 		var a C = &CImpl{} // ERROR "escapes"

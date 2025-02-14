@@ -45,6 +45,12 @@ func StaticCall(call *ir.CallExpr) {
 		return
 	}
 
+	if base.Debug.Testing != 0 {
+		if !typecheck.Implements(typ, sel.X.Type()) {
+			return
+		}
+	}
+
 	// If typ is a shape type, then it was a type argument originally
 	// and we'd need an indirect call through the dictionary anyway.
 	// We're unable to devirtualize this call.
