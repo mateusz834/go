@@ -2799,3 +2799,10 @@
 	&& isDirectIface(itab)
 	&& clobber(v)
 	=> (MakeResult (EqPtr x y) mem)
+
+// Build itabs, this might even allow future devirtualizing.
+(StaticLECall {callAux} (Addr {typeAssert} _) (Addr {staticType} sb) mem)
+	&& isSameCall(callAux, "runtime.typeAssert")
+	&& canBuildStaticItab(typeAssert, staticType)
+	=> (MakeResult (Addr <typ.BytePtr> {buildStaticItab(typeAssert, staticType)} sb) mem)
+

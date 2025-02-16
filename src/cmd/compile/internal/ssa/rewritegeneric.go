@@ -30459,6 +30459,36 @@ func rewriteValuegeneric_OpStaticLECall(v *Value) bool {
 		v.AddArg2(v0, mem)
 		return true
 	}
+	// match: (StaticLECall {callAux} (Addr {typeAssert} _) (Addr {staticType} sb) mem)
+	// cond: isSameCall(callAux, "runtime.typeAssert") && canBuildStaticItab(typeAssert, staticType)
+	// result: (MakeResult (Addr <typ.BytePtr> {buildStaticItab(typeAssert, staticType)} sb) mem)
+	for {
+		if len(v.Args) != 3 {
+			break
+		}
+		callAux := auxToCall(v.Aux)
+		mem := v.Args[2]
+		v_0 := v.Args[0]
+		if v_0.Op != OpAddr {
+			break
+		}
+		typeAssert := auxToSym(v_0.Aux)
+		v_1 := v.Args[1]
+		if v_1.Op != OpAddr {
+			break
+		}
+		staticType := auxToSym(v_1.Aux)
+		sb := v_1.Args[0]
+		if !(isSameCall(callAux, "runtime.typeAssert") && canBuildStaticItab(typeAssert, staticType)) {
+			break
+		}
+		v.reset(OpMakeResult)
+		v0 := b.NewValue0(v.Pos, OpAddr, typ.BytePtr)
+		v0.Aux = symToAux(buildStaticItab(typeAssert, staticType))
+		v0.AddArg(sb)
+		v.AddArg2(v0, mem)
+		return true
+	}
 	return false
 }
 func rewriteValuegeneric_OpStore(v *Value) bool {

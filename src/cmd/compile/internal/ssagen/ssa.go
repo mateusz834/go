@@ -5765,7 +5765,8 @@ func (s *state) dottype1(pos src.XPos, src, dst *types.Type, iface, source, targ
 		var d *ssa.Value
 		if descriptor != nil {
 			d = s.newValue1A(ssa.OpAddr, byteptr, descriptor, s.sb)
-			if base.Flag.N == 0 && rtabi.UseInterfaceSwitchCache(Arch.LinkArch.Name) {
+			// TODO: removing && false, makes code worse (when building static itabs)
+			if base.Flag.N == 0 && rtabi.UseInterfaceSwitchCache(Arch.LinkArch.Name) && false {
 				// Note: we can only use the cache if we have the right atomic load instruction.
 				// Double-check that here.
 				if intrinsics.lookup(Arch.LinkArch.Arch, "internal/runtime/atomic", "Loadp") == nil {

@@ -8,6 +8,7 @@ import (
 	"cmd/compile/internal/base"
 	"cmd/compile/internal/logopt"
 	"cmd/compile/internal/reflectdata"
+	"cmd/compile/internal/typecheck"
 	"cmd/compile/internal/types"
 	"cmd/internal/obj"
 	"cmd/internal/obj/s390x"
@@ -2001,6 +2002,50 @@ func fixedSym(f *Func, sym Sym, off int64) Sym {
 	}
 	base.Fatalf("fixedSym data not known for %s:%d", sym, off)
 	return nil
+}
+
+func hasTypeInfo(sym Sym) bool {
+	return typeInfo(sym) != nil
+}
+
+func hasTypeInfoStatic(sym Sym) bool {
+	ti := typeInfo(sym)
+	return ti != nil && !ti.IsInterface()
+}
+
+func canBuildStaticItab(ta, t Sym) bool {
+	tta := typeInfo(ta)
+	tt := typeInfo(t)
+	if tt == nil || tta == nil || !tta.IsInterface() {
+		return false
+	}
+	if !typecheck.Implements(tt, tta) {
+		return false
+	}
+	return true
+}
+
+func buildStaticItab(typeAssert, typ Sym) Sym {
+	assert := typeInfo(typeAssert)
+	t := typeInfo(typ)
+	if t != nil && assert != nil {
+		return reflectdata.ITabLsymNoDummy(t, assert)
+	}
+	return nil
+}
+
+func typeInfo(t Sym) *types.Type {
+	lsym := t.(*obj.LSym)
+	if lsym.Extra != nil {
+		if v, ok := (*lsym.Extra).(*obj.TypeInfo); ok {
+			return v.Type.(*types.Type)
+		}
+	}
+	return nil
+}
+
+func isTesting() bool {
+	return base.Debug.Testing != 0
 }
 
 // read8 reads one byte from the read-only global sym at offset off.
