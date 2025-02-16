@@ -1,4 +1,4 @@
-// errorcheck -0 -m
+// errorcheck -0 -m -d=testing=2
 
 // Copyright 2025 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
@@ -17,6 +17,12 @@ type Impl struct{}
 func (*Impl) M() {} // ERROR "can inline"
 
 func (*Impl) A() {} // ERROR "can inline"
+
+type Impl2 struct{}
+
+func (*Impl2) M() {} // ERROR "can inline"
+
+func (*Impl2) A() {} // ERROR "can inline"
 
 type CImpl struct{}
 
@@ -186,6 +192,187 @@ func t3() {
 		if v, ok := v.(M); ok {
 			v.M() // ERROR "devirtualizing" "inlining call"
 		}
+	}
+}
+
+//go:noinline
+func newImpl2ret2() (string, *Impl2) {
+	return "str", &Impl2{} // ERROR "escapes"
+}
+
+//go:noinline
+func newImpl2() *Impl2 {
+	return &Impl2{} // ERROR "escapes"
+}
+
+func t5() {
+	{
+		var a A
+		a = &Impl{}  // ERROR "escapes"
+		a = &Impl2{} // ERROR "escapes"
+		a.A()
+	}
+	{
+		a := A(&Impl{}) // ERROR "escapes"
+		a = &Impl2{}    // ERROR "escapes"
+		a.A()
+	}
+	{
+		a := A(&Impl{}) // ERROR "escapes"
+		a.A()
+		a = &Impl2{} // ERROR "escapes"
+	}
+	{
+		a := A(&Impl{}) // ERROR "escapes"
+		a = &Impl2{}    // ERROR "escapes"
+		var asAny any = a
+		asAny.(A).A()
+	}
+	{
+		a := A(&Impl{}) // ERROR "escapes"
+		var asAny any = a
+		asAny = &Impl2{} // ERROR "escapes"
+		asAny.(A).A()
+	}
+	{
+		a := A(&Impl{}) // ERROR "escapes"
+		var asAny any = a
+		asAny.(A).A()
+		asAny = &Impl2{} // ERROR "escapes"
+	}
+	{
+		var a A
+		a = &Impl{} // ERROR "escapes"
+		a = newImpl2()
+		a.A()
+	}
+	{
+		var a A
+		a = &Impl{} // ERROR "escapes"
+		_, a = newImpl2ret2()
+		a.A()
+	}
+	{
+		var a A
+		a = &Impl{}               // ERROR "escapes"
+		m := make(map[int]*Impl2) // ERROR "does not escape"
+		a = m[0]
+		a.A()
+	}
+	{
+		var a A
+		a = &Impl{} // ERROR "escapes"
+		m := make(chan *Impl2)
+		a = <-m
+		a.A()
+	}
+}
+
+func t6() {
+	{
+		m := make(map[int]*Impl) // ERROR "does not escape"
+		var a A
+		a, _ = m[0]
+		if v, ok := a.(M); ok {
+			v.M() // ERROR "devirtualizing" "inlining call"
+		}
+	}
+	{
+		m := make(map[int]*Impl) // ERROR "does not escape"
+		var a A
+		var ok bool
+		if a, ok = m[0]; ok {
+			if v, ok := a.(M); ok {
+				v.M() // ERROR "devirtualizing" "inlining call"
+			}
+		}
+	}
+	{
+		m := make(chan *Impl)
+		var a A
+		a, _ = <-m
+		if v, ok := a.(M); ok {
+			v.M() // ERROR "devirtualizing" "inlining call"
+		}
+	}
+	{
+		m := make(chan *Impl)
+		var a A
+		var ok bool
+		if a, ok = <-m; ok {
+			if v, ok := a.(M); ok {
+				v.M() // ERROR "devirtualizing" "inlining call"
+			}
+		}
+	}
+}
+
+var (
+	globalImpl    = &Impl{}
+	globalImpl2   = &Impl2{}
+	globalA     A = &Impl{}
+	globalM     M = &Impl{}
+)
+
+func t7() {
+	{
+		var a A = &Impl{} // ERROR "does not escape"
+		a = globalImpl
+		a.A() // ERROR "devirtualizing" "inlining call"
+	}
+	{
+		var a A = &Impl{} // ERROR "does not escape"
+		a = A(globalImpl)
+		a.A() // ERROR "devirtualizing" "inlining call"
+	}
+	{
+		var a A = &Impl{} // ERROR "does not escape"
+		a = M(globalImpl).(A)
+		a.A() // ERROR "devirtualizing" "inlining call"
+	}
+	{
+		var a A = &Impl{} // ERROR "escapes"
+		a = globalImpl2
+		a.A()
+	}
+	{
+		var a A = &Impl{} // ERROR "escapes"
+		a = globalA
+		a.A()
+	}
+	{
+		var a A = &Impl{} // ERROR "escapes"
+		a = globalM.(A)
+		a.A()
+	}
+}
+
+func t8() {
+	{
+		var a A = &Impl{} // ERROR "does not escape"
+		a = a
+		a.A() // ERROR "devirtualizing" "inlining call"
+	}
+	{
+		var a A = &Impl{} // ERROR "does not escape"
+		var asAny any = a
+		asAny = asAny
+		asAny.(A).A() // ERROR "devirtualizing" "inlining call"
+	}
+	{
+		var a A = &Impl{} // ERROR "does not escape"
+		var asAny any = a
+		asAny = asAny
+		a = asAny.(A)
+		asAny = a
+		asAny.(A).A() // ERROR "devirtualizing" "inlining call"
+		asAny.(M).M() // ERROR "devirtualizing" "inlining call"
+	}
+	{
+		var a A = &Impl{} // ERROR "does not escape"
+		var asAny A = a
+		a = asAny.(A)
+		a.A()
 	}
 }
 

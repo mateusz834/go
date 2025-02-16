@@ -40,9 +40,24 @@ func StaticCall(call *ir.CallExpr) {
 	}
 
 	sel := call.Fun.(*ir.SelectorExpr)
-	typ := staticType(sel.X)
-	if typ == nil {
-		return
+
+	var typ *types.Type
+
+	if base.Debug.Testing == 0 {
+		r := ir.StaticValue(sel.X)
+		if r.Op() != ir.OCONVIFACE {
+			return
+		}
+		recv := r.(*ir.ConvExpr)
+		typ = recv.X.Type()
+		if typ.IsInterface() {
+			return
+		}
+	} else {
+		typ = staticType(sel.X)
+		if typ == nil {
+			return
+		}
 	}
 
 	// Don't try to devirtualize calls that we statically know that would have failed at runtime.
@@ -143,6 +158,10 @@ func StaticCall(call *ir.CallExpr) {
 }
 
 func staticType(n ir.Node) *types.Type {
+	return staticType1(n, make(map[*ir.Name]struct{}))
+}
+
+func staticType1(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
 	for {
 		switch n1 := n.(type) {
 		case *ir.ConvExpr:
@@ -161,65 +180,155 @@ func staticType(n ir.Node) *types.Type {
 		case *ir.TypeAssertExpr:
 			n = n1.X
 			continue
+		case *ir.CallExpr:
+			results := n1.Fun.Type().Results()
+			if len(results) == 1 {
+				retTyp := results[0].Type
+				if !retTyp.IsInterface() {
+					return retTyp
+				}
+			}
 		}
 
-		n1 := staticValue(n)
-		if n1 == nil {
-			if n.Type().IsInterface() {
-				return nil
-			}
+		if !n.Type().IsInterface() {
 			return n.Type()
 		}
-		n = n1
+
+		return staticType2(n, seen)
 	}
 }
 
-func staticValue(nn ir.Node) ir.Node {
-	if nn.Op() != ir.ONAME {
+func staticType2(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
+	if n.Op() != ir.ONAME {
 		return nil
 	}
 
-	n := nn.(*ir.Name).Canonical()
-	if n.Class != ir.PAUTO {
+	name := n.(*ir.Name).Canonical()
+	if name.Class != ir.PAUTO {
 		return nil
 	}
 
-	defn := n.Defn
-	if defn == nil {
-		return nil
+	if name.Op() != ir.ONAME {
+		// TODO: what is this?
+		base.Fatalf("reassigned %v", name)
 	}
 
-	var rhs ir.Node
-FindRHS:
-	switch defn.Op() {
-	case ir.OAS:
-		defn := defn.(*ir.AssignStmt)
-		rhs = defn.Y
-	case ir.OAS2:
-		defn := defn.(*ir.AssignListStmt)
-		for i, lhs := range defn.Lhs {
-			if lhs == n {
-				rhs = defn.Rhs[i]
-				break FindRHS
+	if name.Addrtaken() {
+		return nil // conservatively assume it's reassigned with a different type indirectly
+	}
+
+	if _, ok := seen[name]; ok {
+		return nil // for now say we don't know the type.
+	}
+	seen[name] = struct{}{}
+
+	// isName reports whether n is a reference to name.
+	isName := func(x ir.Node) bool {
+		if x == nil {
+			return false
+		}
+		n, ok := ir.OuterValue(x).(*ir.Name)
+		return ok && n.Canonical() == name
+	}
+
+	var typ *types.Type
+
+	handleType := func(t *types.Type) bool {
+		if t == nil || t.IsInterface() {
+			typ = nil
+			return true
+		}
+		if typ == nil || types.Identical(typ, t) {
+			typ = t
+			return false
+		}
+		typ = nil
+		return true
+	}
+
+	handleNode := func(n ir.Node) bool {
+		if n == nil {
+			return false
+		}
+		return handleType(staticType1(n, seen))
+	}
+
+	var do func(n ir.Node) bool
+	do = func(n ir.Node) bool {
+		switch n.Op() {
+		case ir.OAS:
+			n := n.(*ir.AssignStmt)
+			if isName(n.X) {
+				return handleNode(n.Y)
+			}
+		case ir.OAS2:
+			n := n.(*ir.AssignListStmt)
+			for i, p := range n.Lhs {
+				if isName(p) {
+					return handleNode(n.Rhs[i])
+				}
+			}
+		case ir.OAS2DOTTYPE:
+			n := n.(*ir.AssignListStmt)
+			for _, p := range n.Lhs {
+				if isName(p) {
+					return handleNode(n.Rhs[0])
+				}
+			}
+		case ir.OAS2FUNC:
+			n := n.(*ir.AssignListStmt)
+			for i, p := range n.Lhs {
+				if isName(p) {
+					rhs := n.Rhs[0]
+					if r, ok := rhs.(*ir.ParenExpr); ok {
+						rhs = r.X
+					}
+					if call, ok := rhs.(*ir.CallExpr); ok {
+						retTyp := call.Fun.Type().Results()[i].Type
+						if !retTyp.IsInterface() {
+							return handleType(retTyp)
+						}
+					}
+					typ = nil
+					return true
+				}
+			}
+		case ir.OAS2MAPR, ir.OAS2RECV, ir.OSELRECV2:
+			n := n.(*ir.AssignListStmt)
+			for _, p := range n.Lhs {
+				if isName(p) {
+					return handleType(n.Rhs[0].Type())
+				}
+			}
+		case ir.OASOP:
+			// TODO: ignore?
+			n := n.(*ir.AssignOpStmt)
+			if isName(n.X) {
+				return true
+			}
+		case ir.OADDR:
+			n := n.(*ir.AddrExpr)
+			if isName(n.X) {
+				base.FatalfAt(n.Pos(), "%v not marked addrtaken", name)
+			}
+		// TODO: add tests
+		case ir.ORANGE:
+			n := n.(*ir.RangeStmt)
+			if isName(n.Key) {
+				return handleNode(n.Key)
+			}
+			if isName(n.Value) {
+				return handleNode(n.Value)
+			}
+		// TODO: add tests
+		case ir.OCLOSURE:
+			n := n.(*ir.ClosureExpr)
+			if ir.Any(n.Func, do) {
+				return true
 			}
 		}
-		base.Fatalf("%v missing from LHS of %v", n, defn)
-	case ir.OAS2DOTTYPE:
-		defn := defn.(*ir.AssignListStmt)
-		if defn.Lhs[0] == n {
-			rhs = defn.Rhs[0]
-		}
-	default:
-		return nil
+		return false
 	}
-
-	if rhs == nil {
-		base.Fatalf("RHS is nil: %v", defn)
-	}
-
-	if ir.Reassigned(n) {
-		return nil
-	}
-
-	return rhs
+	ir.Any(name.Curfn, do)
+	return typ
 }
