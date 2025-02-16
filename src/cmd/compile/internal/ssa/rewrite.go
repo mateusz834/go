@@ -2003,6 +2003,29 @@ func fixedSym(f *Func, sym Sym, off int64) Sym {
 	return nil
 }
 
+func fixedSym2(f *Func, sym Sym, off int64) bool {
+	lsym := sym.(*obj.LSym)
+	for _, r := range lsym.R {
+		if (r.Type == objabi.R_ADDR || r.Type == objabi.R_WEAKADDR) && int64(r.Off) == off {
+			if strings.HasPrefix(r.Sym.Name, "type:") {
+				// In case we're loading a type out of a dictionary, we need to record
+				// that the containing function might put that type in an interface.
+				// That information is currently recorded in relocations in the dictionary,
+				// but if we perform this load at compile time then the dictionary
+				// might be dead.
+				reflectdata.MarkTypeSymUsedInInterface(r.Sym, f.fe.Func().Linksym())
+			} else if strings.HasPrefix(r.Sym.Name, "go:itab") {
+				// Same, but if we're using an itab we need to record that the
+				// itab._type might be put in an interface.
+				reflectdata.MarkTypeSymUsedInInterface(r.Sym, f.fe.Func().Linksym())
+			}
+			return false
+		}
+	}
+	base.Fatalf("fixedSym data not known for %s:%d", sym, off)
+	return false
+}
+
 // read8 reads one byte from the read-only global sym at offset off.
 func read8(sym interface{}, off int64) uint8 {
 	lsym := sym.(*obj.LSym)
