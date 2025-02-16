@@ -376,6 +376,64 @@ func t8() {
 	}
 }
 
+func t99() {
+	var a interface {
+		M
+		A
+	} = &Impl{} // ERROR "does not escape"
+
+	{
+		var b A = a
+		b.A()     // ERROR "devirtualizing" "inlining call"
+		b.(M).M() // ERROR "devirtualizing" "inlining call"
+	}
+	{
+		var b M = a
+		b.M()     // ERROR "devirtualizing" "inlining call"
+		b.(A).A() // ERROR "devirtualizing" "inlining call"
+	}
+	{
+		var b A = a.(M).(A)
+		b.A()     // ERROR "devirtualizing" "inlining call"
+		b.(M).M() // ERROR "devirtualizing" "inlining call"
+	}
+	{
+		var b M = a.(A).(M)
+		b.M()     // ERROR "devirtualizing" "inlining call"
+		b.(A).A() // ERROR "devirtualizing" "inlining call"
+	}
+
+	if v, ok := a.(A); ok {
+		v.A() // ERROR "devirtualizing" "inlining call"
+	}
+
+	if v, ok := a.(M); ok {
+		v.M() // ERROR "devirtualizing" "inlining call"
+	}
+
+	{
+		var c A = a
+
+		if v, ok := c.(A); ok {
+			v.A() // ERROR "devirtualizing" "inlining call"
+		}
+
+		c = &Impl{} // ERROR "does not escape"
+
+		if v, ok := c.(M); ok {
+			v.M() // ERROR "devirtualizing" "inlining call"
+		}
+
+		if v, ok := c.(interface {
+			A
+			M
+		}); ok {
+			v.M() // ERROR "devirtualizing" "inlining call"
+			v.A() // ERROR "devirtualizing" "inlining call"
+		}
+	}
+}
+
 //go:noinline
 func testInvalidAsserts() {
 	any(0).(interface{ A() }).A() // ERROR "escapes"
