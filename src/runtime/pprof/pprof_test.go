@@ -346,8 +346,11 @@ func (h inlineWrapper) dump(pcs []uintptr) {
 	dumpCallers(pcs)
 }
 
+var global inlineWrapperInterface
+
 func inlinedWrapperCallerDump(pcs []uintptr) {
 	var h inlineWrapperInterface
+	h = global // assing a global so that h.dump call (below) is not devirtualized.
 	h = &inlineWrapper{}
 	h.dump(pcs)
 }
