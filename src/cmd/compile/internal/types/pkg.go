@@ -67,13 +67,8 @@ func (pkg *Pkg) Lookup(name string) *Sym {
 	return s
 }
 
-var mu sync.Mutex
-
 // LookupOK looks up name in pkg and reports whether it previously existed.
 func (pkg *Pkg) LookupOK(name string) (s *Sym, existed bool) {
-	mu.Lock()
-	defer mu.Unlock()
-
 	// TODO(gri) remove this check in favor of specialized lookup
 	if pkg == nil {
 		pkg = nopkg

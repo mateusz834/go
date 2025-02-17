@@ -600,8 +600,8 @@ func ITabLsymNoDummy(typ, iface *types.Type) *obj.LSym {
 }
 
 func itabLsym(typ, iface *types.Type, allowNonImplement bool) *obj.LSym {
-	s, existed := ir.Pkgs.Itab.LookupOK(typ.LinkString() + "," + iface.LinkString())
 	signatmu.Lock()
+	s, existed := ir.Pkgs.Itab.LookupOK(typ.LinkString() + "," + iface.LinkString())
 	lsym := s.Linksym()
 	if lsym.Extra == nil {
 		ii := lsym.NewItabInfo()

@@ -134,8 +134,14 @@ func rewriteValuegeneric(v *Value) bool {
 		return rewriteValuegeneric_OpEqSlice(v)
 	case OpFloor:
 		return rewriteValuegeneric_OpFloor(v)
+	case OpIData:
+		return rewriteValuegeneric_OpIData(v)
 	case OpIMake:
 		return rewriteValuegeneric_OpIMake(v)
+	case OpITab:
+		return rewriteValuegeneric_OpITab(v)
+	case OpInterCall:
+		return rewriteValuegeneric_OpInterCall(v)
 	case OpInterLECall:
 		return rewriteValuegeneric_OpInterLECall(v)
 	case OpIsInBounds:
@@ -10628,6 +10634,20 @@ func rewriteValuegeneric_OpFloor(v *Value) bool {
 	}
 	return false
 }
+func rewriteValuegeneric_OpIData(v *Value) bool {
+	v_0 := v.Args[0]
+	// match: (IData (IMake _ data))
+	// result: data
+	for {
+		if v_0.Op != OpIMake {
+			break
+		}
+		data := v_0.Args[1]
+		v.copyOf(data)
+		return true
+	}
+	return false
+}
 func rewriteValuegeneric_OpIMake(v *Value) bool {
 	v_1 := v.Args[1]
 	v_0 := v.Args[0]
@@ -10653,6 +10673,42 @@ func rewriteValuegeneric_OpIMake(v *Value) bool {
 		val := v_1.Args[0]
 		v.reset(OpIMake)
 		v.AddArg2(_typ, val)
+		return true
+	}
+	return false
+}
+func rewriteValuegeneric_OpITab(v *Value) bool {
+	v_0 := v.Args[0]
+	// match: (ITab (IMake itab _))
+	// result: itab
+	for {
+		if v_0.Op != OpIMake {
+			break
+		}
+		itab := v_0.Args[0]
+		v.copyOf(itab)
+		return true
+	}
+	return false
+}
+func rewriteValuegeneric_OpInterCall(v *Value) bool {
+	// match: (InterCall [argsize] {auxCall} (Addr {fn} (SB)) ___)
+	// cond: isTesting()
+	// result: devirtCall(v, fn.(*obj.LSym))
+	for {
+		if len(v.Args) < 1 {
+			break
+		}
+		v_0 := v.Args[0]
+		if v_0.Op != OpAddr {
+			break
+		}
+		fn := auxToSym(v_0.Aux)
+		v_0_0 := v_0.Args[0]
+		if v_0_0.Op != OpSB || !(isTesting()) {
+			break
+		}
+		v.copyOf(devirtCall(v, fn.(*obj.LSym)))
 		return true
 	}
 	return false
@@ -30486,6 +30542,33 @@ func rewriteValuegeneric_OpStaticLECall(v *Value) bool {
 		v0 := b.NewValue0(v.Pos, OpAddr, typ.BytePtr)
 		v0.Aux = symToAux(buildStaticItab(typeAssert, staticType))
 		v0.AddArg(sb)
+		v.AddArg2(v0, mem)
+		return true
+	}
+	// match: (StaticLECall {callAux} (Addr {typeAssert} _) (Addr {staticType} sb) mem)
+	// cond: isSameCall(callAux, "runtime.typeAssert") && typeAssertCanFailFailed(typeAssert, staticType)
+	// result: (MakeResult (ConstNil) mem)
+	for {
+		if len(v.Args) != 3 {
+			break
+		}
+		callAux := auxToCall(v.Aux)
+		mem := v.Args[2]
+		v_0 := v.Args[0]
+		if v_0.Op != OpAddr {
+			break
+		}
+		typeAssert := auxToSym(v_0.Aux)
+		v_1 := v.Args[1]
+		if v_1.Op != OpAddr {
+			break
+		}
+		staticType := auxToSym(v_1.Aux)
+		if !(isSameCall(callAux, "runtime.typeAssert") && typeAssertCanFailFailed(typeAssert, staticType)) {
+			break
+		}
+		v.reset(OpMakeResult)
+		v0 := b.NewValue0(v.Pos, OpConstNil, typ.BytePtr)
 		v.AddArg2(v0, mem)
 		return true
 	}

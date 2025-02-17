@@ -590,7 +590,8 @@ func (s *LSym) File() *FileInfo {
 // A TypeInfo contains information for a symbol
 // that contains a runtime._type.
 type TypeInfo struct {
-	Type interface{} // a *cmd/compile/internal/types.Type
+	CanFail bool
+	Type    interface{} // a *cmd/compile/internal/types.Type
 }
 
 func (s *LSym) NewTypeInfo() *TypeInfo {

@@ -752,6 +752,7 @@ func makeTypeAssertDescriptor(target *types.Type, canFail bool) *obj.LSym {
 	if lsym.Extra == nil {
 		ii := lsym.NewTypeInfo()
 		ii.Type = target
+		ii.CanFail = canFail
 	}
 	typeAssertGen++
 	c := rttype.NewCursor(lsym, 0, rttype.TypeAssert)

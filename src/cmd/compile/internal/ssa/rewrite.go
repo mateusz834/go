@@ -817,6 +817,21 @@ func devirtLECall(v *Value, sym *obj.LSym) *Value {
 	return v
 }
 
+func devirtCall(v *Value, sym *obj.LSym) *Value {
+	v.Op = OpStaticCall
+	auxcall := v.Aux.(*AuxCall)
+	auxcall.Fn = sym
+	// Remove first arg
+	v.Args[0].Uses--
+	copy(v.Args[0:], v.Args[1:])
+	v.Args[len(v.Args)-1] = nil // aid GC
+	v.Args = v.Args[:len(v.Args)-1]
+	if f := v.Block.Func; f.pass.debug > 0 {
+		f.Warnl(v.Pos, "de-virtualizing call")
+	}
+	return v
+}
+
 // isSamePtr reports whether p1 and p2 point to the same address.
 func isSamePtr(p1, p2 *Value) bool {
 	if p1 == p2 {
@@ -2004,20 +2019,29 @@ func fixedSym(f *Func, sym Sym, off int64) Sym {
 	return nil
 }
 
-func hasTypeInfo(sym Sym) bool {
-	return typeInfo(sym) != nil
-}
-
-func hasTypeInfoStatic(sym Sym) bool {
-	ti := typeInfo(sym)
-	return ti != nil && !ti.IsInterface()
+func typeAssertCanFailFailed(ta, t Sym) bool {
+	tta := typeInfo(ta)
+	tt := typeInfo(t).Type.(*types.Type)
+	if tt == nil || tta == nil {
+		return false
+	}
+	if !tta.Type.(*types.Type).IsInterface() {
+		base.Fatalf("TypeInfo of a abi.TypeAssert Sym does not contain an interface type, but %v", tta)
+	}
+	if tta.CanFail && !typecheck.Implements(tt, tta.Type.(*types.Type)) {
+		return true
+	}
+	return false
 }
 
 func canBuildStaticItab(ta, t Sym) bool {
-	tta := typeInfo(ta)
-	tt := typeInfo(t)
-	if tt == nil || tta == nil || !tta.IsInterface() {
+	tta := typeInfo(ta).Type.(*types.Type)
+	tt := typeInfo(t).Type.(*types.Type)
+	if tt == nil || tta == nil {
 		return false
+	}
+	if !tta.IsInterface() {
+		base.Fatalf("TypeInfo of a abi.TypeAssert Sym does not contain an interface type, but %v", tta)
 	}
 	if !typecheck.Implements(tt, tta) {
 		return false
@@ -2026,19 +2050,20 @@ func canBuildStaticItab(ta, t Sym) bool {
 }
 
 func buildStaticItab(typeAssert, typ Sym) Sym {
-	assert := typeInfo(typeAssert)
-	t := typeInfo(typ)
+	assert := typeInfo(typeAssert).Type.(*types.Type)
+	t := typeInfo(typ).Type.(*types.Type)
 	if t != nil && assert != nil {
+		// TODO: mark used? as in fixedsym
 		return reflectdata.ITabLsymNoDummy(t, assert)
 	}
 	return nil
 }
 
-func typeInfo(t Sym) *types.Type {
+func typeInfo(t Sym) *obj.TypeInfo {
 	lsym := t.(*obj.LSym)
 	if lsym.Extra != nil {
 		if v, ok := (*lsym.Extra).(*obj.TypeInfo); ok {
-			return v.Type.(*types.Type)
+			return v
 		}
 	}
 	return nil
