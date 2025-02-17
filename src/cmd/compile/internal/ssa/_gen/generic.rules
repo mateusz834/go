@@ -347,21 +347,6 @@
 (Not (Leq(64|32|16|8) x y)) => (Less(64|32|16|8) y x)
 (Not (Leq(64|32|16|8)U x y)) => (Less(64|32|16|8)U y x)
 
-// (ITab (IMake itab _)) => itab
-// (IData (IMake _ data)) => data
-
-//(StaticLECall {callAux} () (Load (OffPtr {8} (Addr {itab}))), ())
-//	&& isSameCall(callAux, "runtime.typeassert")
-//	&& fixedSym2(b.Func, s, 8)
-//=> itab
-
-// Load staticly known types from statically known itabs.
-//(Load (OffPtr {8} (Addr {itab}))) && fixedSym2(b.Func, s, 8) => staticType(itab)
-
-// match: (Load <t> (OffPtr [off] (Addr {s} sb) ) _)
-// cond: t.IsUintptr() && isFixedSym(s, off)
-// result: (Addr {fixedSym(b.Func, s, off)} sb)
-
 // Distribute multiplication c * (d+x) -> c*d + c*x. Useful for:
 // a[i].b = ...; a[i+1].b = ...
 (Mul64 (Const64 <t> [c]) (Add64 <t> (Const64 <t> [d]) x)) =>
