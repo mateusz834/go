@@ -234,7 +234,6 @@ func concreteType2(n ir.Node, analyzed map[*ir.Name]*types.Type) *types.Type {
 		if x == nil {
 			return false
 		}
-		// TODO: we don't need outerValue?
 		n, ok := ir.OuterValue(x).(*ir.Name)
 		return ok && n.Canonical() == name
 	}
