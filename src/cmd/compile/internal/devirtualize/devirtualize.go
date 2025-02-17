@@ -18,7 +18,7 @@ import (
 	"cmd/compile/internal/types"
 )
 
-const go125improvedConcreteTypeAnalysis = false
+const go125improvedConcreteTypeAnalysis = true
 
 // StaticCall devirtualizes the given call if possible when the concrete callee
 // is available statically.
@@ -43,7 +43,7 @@ func StaticCall(call *ir.CallExpr) {
 
 	sel := call.Fun.(*ir.SelectorExpr)
 	var typ *types.Type
-	if go125improvedConcreteTypeAnalysis || base.Debug.Testing != 0 {
+	if go125improvedConcreteTypeAnalysis {
 		typ = concreteType(sel.X)
 		if typ == nil {
 			return
@@ -161,7 +161,7 @@ func concreteType(n ir.Node) *types.Type {
 	return concreteType1(n, make(map[*ir.Name]*types.Type))
 }
 
-func concreteType1(n ir.Node, seen map[*ir.Name]*types.Type) *types.Type {
+func concreteType1(n ir.Node, analyzed map[*ir.Name]*types.Type) *types.Type {
 	for {
 		switch n1 := n.(type) {
 		case *ir.ConvExpr:
@@ -197,11 +197,11 @@ func concreteType1(n ir.Node, seen map[*ir.Name]*types.Type) *types.Type {
 			return n.Type()
 		}
 
-		return concreteType2(n, seen)
+		return concreteType2(n, analyzed)
 	}
 }
 
-func concreteType2(n ir.Node, seen map[*ir.Name]*types.Type) *types.Type {
+func concreteType2(n ir.Node, analyzed map[*ir.Name]*types.Type) *types.Type {
 	if n.Op() != ir.ONAME {
 		return nil
 	}
@@ -219,7 +219,7 @@ func concreteType2(n ir.Node, seen map[*ir.Name]*types.Type) *types.Type {
 		return nil // conservatively assume it's reassigned with a different type indirectly
 	}
 
-	if typ, ok := seen[name]; ok {
+	if typ, ok := analyzed[name]; ok {
 		return typ
 	}
 
@@ -227,7 +227,7 @@ func concreteType2(n ir.Node, seen map[*ir.Name]*types.Type) *types.Type {
 	// it at the end of this function, if we find a concrete type.
 	// This is not ideal, as in-process concreteType1 calls (that this function also
 	// executes) will get a nil (from the map lookup above), where we could determine the type.
-	seen[name] = nil
+	analyzed[name] = nil
 
 	// isName reports whether n is a reference to name.
 	isName := func(x ir.Node) bool {
@@ -262,7 +262,7 @@ func concreteType2(n ir.Node, seen map[*ir.Name]*types.Type) *types.Type {
 			// TODO: when this can hapen?
 			return false
 		}
-		return handleType(concreteType1(n, seen))
+		return handleType(concreteType1(n, analyzed))
 	}
 
 	var do func(n ir.Node) bool
@@ -338,6 +338,6 @@ func concreteType2(n ir.Node, seen map[*ir.Name]*types.Type) *types.Type {
 		return false
 	}
 	ir.Any(name.Curfn, do)
-	seen[name] = typ
+	analyzed[name] = typ
 	return typ
 }
