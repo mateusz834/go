@@ -2804,7 +2804,7 @@
 	=> (MakeResult (EqPtr x y) mem)
 
 // TODO: this is also doce in dec.rules.
-// Move that to rules below?
+// Move that to rules below? and have multiple variants? or keep it here?
 (ITab (IMake itab _)) => itab
 (IData (IMake _ data)) => data
 
