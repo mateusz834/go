@@ -350,6 +350,7 @@ var global inlineWrapperInterface
 
 func inlinedWrapperCallerDump(pcs []uintptr) {
 	var h inlineWrapperInterface
+	// TODO: figure out what happens here (test fails without this).
 	h = global // assing a global so that h.dump call (below) is not devirtualized.
 	h = &inlineWrapper{}
 	h.dump(pcs)
