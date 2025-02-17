@@ -2243,7 +2243,7 @@
 (InterLECall [argsize] {auxCall} (Addr {fn} (SB)) ___) => devirtLECall(v, fn.(*obj.LSym))
 
 // De-virtualize statically known interface calls into static calls.
-(InterCall [argsize] {auxCall} (Addr {fn} (SB)) ___) && isTesting() => devirtCall(v, fn.(*obj.LSym))
+(InterCall [argsize] {auxCall} (Addr {fn} (SB)) ___) => devirtCall(v, fn.(*obj.LSym))
 
 // Move and Zero optimizations.
 // Move source and destination may overlap.
@@ -2803,21 +2803,16 @@
 	&& clobber(v)
 	=> (MakeResult (EqPtr x y) mem)
 
-// TODO: this is also doce in dec.rules.
-// Move that to rules below? and have multiple variants? or keep it here?
-(ITab (IMake itab _)) => itab
-(IData (IMake _ data)) => data
+(ITab (IMake itab:(Addr (SB)) _)) => itab
 
 // Build itabs, this might even allow future devirtualizing of calls.
 (StaticLECall {callAux} (Addr {typeAssert} _) (Addr {staticType} sb) mem)
-	//&& isTesting()
 	&& isSameCall(callAux, "runtime.typeAssert")
 	&& canBuildStaticItab(typeAssert, staticType)
 	=> (MakeResult (Addr <typ.BytePtr> {buildStaticItab(typeAssert, staticType)} sb) mem)
 
 // Optimize, runtime.typeAssert calls that would have returned nil.
 (StaticLECall {callAux} (Addr {typeAssert} _) (Addr {staticType} sb) mem)
-	//&& isTesting()
 	&& isSameCall(callAux, "runtime.typeAssert")
 	&& typeAssertCanFailFailed(typeAssert, staticType)
 	=> (MakeResult (ConstNil) mem)

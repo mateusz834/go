@@ -134,8 +134,6 @@ func rewriteValuegeneric(v *Value) bool {
 		return rewriteValuegeneric_OpEqSlice(v)
 	case OpFloor:
 		return rewriteValuegeneric_OpFloor(v)
-	case OpIData:
-		return rewriteValuegeneric_OpIData(v)
 	case OpIMake:
 		return rewriteValuegeneric_OpIMake(v)
 	case OpITab:
@@ -10634,20 +10632,6 @@ func rewriteValuegeneric_OpFloor(v *Value) bool {
 	}
 	return false
 }
-func rewriteValuegeneric_OpIData(v *Value) bool {
-	v_0 := v.Args[0]
-	// match: (IData (IMake _ data))
-	// result: data
-	for {
-		if v_0.Op != OpIMake {
-			break
-		}
-		data := v_0.Args[1]
-		v.copyOf(data)
-		return true
-	}
-	return false
-}
 func rewriteValuegeneric_OpIMake(v *Value) bool {
 	v_1 := v.Args[1]
 	v_0 := v.Args[0]
@@ -10679,13 +10663,20 @@ func rewriteValuegeneric_OpIMake(v *Value) bool {
 }
 func rewriteValuegeneric_OpITab(v *Value) bool {
 	v_0 := v.Args[0]
-	// match: (ITab (IMake itab _))
+	// match: (ITab (IMake itab:(Addr (SB)) _))
 	// result: itab
 	for {
 		if v_0.Op != OpIMake {
 			break
 		}
 		itab := v_0.Args[0]
+		if itab.Op != OpAddr {
+			break
+		}
+		itab_0 := itab.Args[0]
+		if itab_0.Op != OpSB {
+			break
+		}
 		v.copyOf(itab)
 		return true
 	}
@@ -10693,7 +10684,6 @@ func rewriteValuegeneric_OpITab(v *Value) bool {
 }
 func rewriteValuegeneric_OpInterCall(v *Value) bool {
 	// match: (InterCall [argsize] {auxCall} (Addr {fn} (SB)) ___)
-	// cond: isTesting()
 	// result: devirtCall(v, fn.(*obj.LSym))
 	for {
 		if len(v.Args) < 1 {
@@ -10705,7 +10695,7 @@ func rewriteValuegeneric_OpInterCall(v *Value) bool {
 		}
 		fn := auxToSym(v_0.Aux)
 		v_0_0 := v_0.Args[0]
-		if v_0_0.Op != OpSB || !(isTesting()) {
+		if v_0_0.Op != OpSB {
 			break
 		}
 		v.copyOf(devirtCall(v, fn.(*obj.LSym)))
