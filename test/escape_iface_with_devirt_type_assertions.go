@@ -345,38 +345,82 @@ func t7() {
 		a = globalM.(A)
 		a.A()
 	}
+	{
+		var a A = &Impl{}                    // ERROR "does not escape"
+		for _, v := range []*Impl{&Impl{}} { // ERROR "does not escape"
+			a = v
+		}
+
+		k, v := &Impl{}, &Impl{}                  // ERROR "escapes"
+		for k, v := range map[*Impl]*Impl{k: v} { // ERROR "does not escape"
+			a = k
+			a = v
+		}
+
+		a.A()     // ERROR "devirtualizing" "inlining call"
+		a.(A).A() // ERROR "devirtualizing""inlining call"
+		a.(M).M() // ERROR "devirtualizing""inlining call"
+
+		var m M = a.(M)
+		m.M()     // ERROR "devirtualizing""inlining call"
+		m.(A).A() // ERROR "devirtualizing""inlining call"
+	}
+	{
+		var a A = &Impl{}                   // ERROR "escapes"
+		var impl2 = &Impl2{}                // ERROR "escapes"
+		for _, v := range []*Impl2{impl2} { // ERROR "does not escape"
+			a = v
+		}
+		a.A()
+	}
+	{
+		var a A = &Impl{}                           // ERROR "escapes"
+		k, v := &Impl2{}, &Impl2{}                  // ERROR "escapes"
+		for k, _ := range map[*Impl2]*Impl2{k: v} { // ERROR "does not escape"
+			a = k
+		}
+		a.A()
+	}
+	{
+		var a A = &Impl{}                           // ERROR "escapes"
+		k, v := &Impl2{}, &Impl2{}                  // ERROR "escapes"
+		for _, v := range map[*Impl2]*Impl2{k: v} { // ERROR "does not escape"
+			a = v
+		}
+		a.A()
+	}
 }
 
 func t8() {
 	{
-		var a A = &Impl{} // ERROR "does not escape"
+		var a A = &Impl{} // ERROR "escapes"
 		a = a
-		a.A() // ERROR "devirtualizing" "inlining call"
+		a.A()
 	}
 	{
-		var a A = &Impl{} // ERROR "does not escape"
+		var a A = &Impl{} // ERROR "escapes"
 		var asAny any = a
 		asAny = asAny
-		asAny.(A).A() // ERROR "devirtualizing" "inlining call"
+		asAny.(A).A()
 	}
 	{
-		var a A = &Impl{} // ERROR "does not escape"
+		var a A = &Impl{} // ERROR "escapes"
 		var asAny any = a
 		asAny = asAny
 		a = asAny.(A)
 		asAny = a
-		asAny.(A).A() // ERROR "devirtualizing" "inlining call"
-		asAny.(M).M() // ERROR "devirtualizing" "inlining call"
+		asAny.(A).A()
+		asAny.(M).M()
 	}
 	{
-		var a A = &Impl{} // ERROR "does not escape"
+		var a A = &Impl{} // ERROR "escapes"
 		var asAny A = a
 		a = asAny.(A)
 		a.A()
 	}
 }
 
-func t99() {
+func t9() {
 	var a interface {
 		M
 		A
@@ -432,6 +476,78 @@ func t99() {
 			v.A() // ERROR "devirtualizing" "inlining call"
 		}
 	}
+}
+
+func t10() {
+	var a A
+	defer func() { // ERROR "func literal does not escape" "can inline"
+		a = &Impl{} // ERROR "escapes"
+	}()
+	a = &Impl{} // ERROR "does not escape"
+	a.A()       // ERROR "devirtualizing" "inlining call"
+}
+
+func t11() {
+	var a A
+	defer func() { // ERROR "func literal does not escape" "can inline"
+		a = &Impl2{} // ERROR "escapes"
+	}()
+	a = &Impl{} // ERROR "escapes"
+	a.A()
+}
+
+func t12() {
+	var a A
+	func() { // ERROR "func literal does not escape"
+		// defer so that it does not lnline.
+		defer func() {}() // ERROR "can inline" "func literal does not escape"
+		a = &Impl{}       // ERROR "escapes"
+	}()
+	a = &Impl{} // ERROR "does not escape"
+	a.A()       // ERROR "devirtualizing" "inlining call"
+}
+
+func t13() {
+	var a A
+	func() { // ERROR "func literal does not escape"
+		// defer so that it does not lnline.
+		defer func() {}() // ERROR "can inline" "func literal does not escape"
+		a = &Impl2{}      // ERROR "escapes"
+	}()
+	a = &Impl{} // ERROR "escapes"
+	a.A()
+}
+
+var global = "1"
+
+func t14() {
+	var a A
+	a = &Impl{}   // ERROR "does not escape"
+	c := func() { // ERROR "can inline" "func literal does not escape"
+		a = &Impl{} // ERROR "escapes"
+	}
+	if global == "1" {
+		c = func() { // ERROR "can inline" "func literal does not escape"
+			a = &Impl{} // ERROR "escapes"
+		}
+	}
+	a.A() // ERROR "devirtualizing" "inlining call"
+	c()
+}
+
+func t15() {
+	var a A
+	a = &Impl{}   // ERROR "escapes"
+	c := func() { // ERROR "can inline" "func literal does not escape"
+		a = &Impl2{} // ERROR "escapes"
+	}
+	if global == "1" {
+		c = func() { // ERROR "can inline" "func literal does not escape"
+			a = &Impl{} // ERROR "escapes"
+		}
+	}
+	a.A()
+	c()
 }
 
 //go:noinline

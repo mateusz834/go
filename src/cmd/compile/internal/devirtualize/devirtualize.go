@@ -54,7 +54,7 @@ func StaticCall(call *ir.CallExpr) {
 			return
 		}
 	} else {
-		typ = staticType(sel.X)
+		typ = concreteType(sel.X)
 		if typ == nil {
 			return
 		}
@@ -157,11 +157,11 @@ func StaticCall(call *ir.CallExpr) {
 	typecheck.FixMethodCall(call)
 }
 
-func staticType(n ir.Node) *types.Type {
-	return staticType1(n, make(map[*ir.Name]struct{}))
+func concreteType(n ir.Node) *types.Type {
+	return concreteType1(n, make(map[*ir.Name]*types.Type))
 }
 
-func staticType1(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
+func concreteType1(n ir.Node, seen map[*ir.Name]*types.Type) *types.Type {
 	for {
 		switch n1 := n.(type) {
 		case *ir.ConvExpr:
@@ -188,17 +188,18 @@ func staticType1(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
 					return retTyp
 				}
 			}
+			return nil
 		}
 
 		if !n.Type().IsInterface() {
 			return n.Type()
 		}
 
-		return staticType2(n, seen)
+		return concreteType2(n, seen)
 	}
 }
 
-func staticType2(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
+func concreteType2(n ir.Node, seen map[*ir.Name]*types.Type) *types.Type {
 	if n.Op() != ir.ONAME {
 		return nil
 	}
@@ -209,7 +210,6 @@ func staticType2(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
 	}
 
 	if name.Op() != ir.ONAME {
-		// TODO: what is this?
 		base.Fatalf("reassigned %v", name)
 	}
 
@@ -217,16 +217,22 @@ func staticType2(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
 		return nil // conservatively assume it's reassigned with a different type indirectly
 	}
 
-	if _, ok := seen[name]; ok {
-		return nil // for now say we don't know the type.
+	if typ, ok := seen[name]; ok {
+		return typ
 	}
-	seen[name] = struct{}{}
+
+	// For now set the Type to nil, as we don't know it yet, we will update
+	// it at the end of this function, if we find a concrete type.
+	// This is not ideal, as in-process concreteType1 calls (that this function also
+	// executes) will get a nil (from the map lookup above), where we could determine the type.
+	seen[name] = nil
 
 	// isName reports whether n is a reference to name.
 	isName := func(x ir.Node) bool {
 		if x == nil {
 			return false
 		}
+		// TODO: we don't need outerValue?
 		n, ok := ir.OuterValue(x).(*ir.Name)
 		return ok && n.Canonical() == name
 	}
@@ -238,19 +244,23 @@ func staticType2(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
 			typ = nil
 			return true
 		}
+
 		if typ == nil || types.Identical(typ, t) {
 			typ = t
 			return false
 		}
+
+		// Different type.
 		typ = nil
 		return true
 	}
 
 	handleNode := func(n ir.Node) bool {
 		if n == nil {
+			// TODO: when this can hapen?
 			return false
 		}
-		return handleType(staticType1(n, seen))
+		return handleType(concreteType1(n, seen))
 	}
 
 	var do func(n ir.Node) bool
@@ -280,8 +290,12 @@ func staticType2(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
 			for i, p := range n.Lhs {
 				if isName(p) {
 					rhs := n.Rhs[0]
-					if r, ok := rhs.(*ir.ParenExpr); ok {
-						rhs = r.X
+					for {
+						if r, ok := rhs.(*ir.ParenExpr); ok {
+							rhs = r.X
+							continue
+						}
+						break
 					}
 					if call, ok := rhs.(*ir.CallExpr); ok {
 						retTyp := call.Fun.Type().Results()[i].Type
@@ -311,7 +325,6 @@ func staticType2(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
 			if isName(n.X) {
 				base.FatalfAt(n.Pos(), "%v not marked addrtaken", name)
 			}
-		// TODO: add tests
 		case ir.ORANGE:
 			n := n.(*ir.RangeStmt)
 			if isName(n.Key) {
@@ -320,7 +333,6 @@ func staticType2(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
 			if isName(n.Value) {
 				return handleNode(n.Value)
 			}
-		// TODO: add tests
 		case ir.OCLOSURE:
 			n := n.(*ir.ClosureExpr)
 			if ir.Any(n.Func, do) {
@@ -330,5 +342,6 @@ func staticType2(n ir.Node, seen map[*ir.Name]struct{}) *types.Type {
 		return false
 	}
 	ir.Any(name.Curfn, do)
+	seen[name] = typ
 	return typ
 }
