@@ -1,4 +1,4 @@
-// errorcheck -0 -m -d=testing=2
+// errorcheck -0 -m
 
 // Copyright 2025 The Go Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
@@ -550,7 +550,17 @@ func t15() {
 	c()
 }
 
+type implWrapper Impl
+
+func (implWrapper) A() {} // ERROR "can inline"
+
 //go:noinline
+func t16() {
+	i := &Impl{} // ERROR "does not escape"
+	var a A = (*implWrapper)(i)
+	a.A() // ERROR "devirtualizing a.A to \*implWrapper" "inlining call"
+}
+
 func testInvalidAsserts() {
 	any(0).(interface{ A() }).A() // ERROR "escapes"
 	{

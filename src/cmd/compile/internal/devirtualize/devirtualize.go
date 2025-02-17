@@ -165,7 +165,11 @@ func concreteType1(n ir.Node, analyzed map[*ir.Name]*types.Type) *types.Type {
 	for {
 		switch n1 := n.(type) {
 		case *ir.ConvExpr:
-			if n1.Op() == ir.OCONVNOP || n1.Op() == ir.OCONVIFACE {
+			if n1.Op() == ir.OCONVNOP && types.Identical(n1.Type(), n1.X.Type()) {
+				n = n1.X
+				continue
+			}
+			if n1.Op() == ir.OCONVIFACE {
 				n = n1.X
 				continue
 			}
@@ -308,6 +312,7 @@ func concreteType2(n ir.Node, analyzed map[*ir.Name]*types.Type) *types.Type {
 					return true
 				}
 			}
+			// TODO: test cases:
 		case ir.OAS2MAPR, ir.OAS2RECV, ir.OSELRECV2:
 			n := n.(*ir.AssignListStmt)
 			for _, p := range n.Lhs {
