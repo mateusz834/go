@@ -18,6 +18,8 @@ import (
 	"cmd/compile/internal/types"
 )
 
+const go125improvedConcreteTypeAnalysis = false
+
 // StaticCall devirtualizes the given call if possible when the concrete callee
 // is available statically.
 func StaticCall(call *ir.CallExpr) {
@@ -40,10 +42,22 @@ func StaticCall(call *ir.CallExpr) {
 	}
 
 	sel := call.Fun.(*ir.SelectorExpr)
-
 	var typ *types.Type
+	if go125improvedConcreteTypeAnalysis || base.Debug.Testing != 0 {
+		typ = concreteType(sel.X)
+		if typ == nil {
+			return
+		}
 
-	if base.Debug.Testing == 0 {
+		// Don't try to devirtualize calls that we statically know that would have failed at runtime.
+		// This can happen in such case: any(0).(interface {A()}).A(), this typechecks without
+		// any errors, but will cause a runtime panic. We statically know that int(0) does not
+		// implement that interface, thus we skip the devirtualization, as it is not possible
+		// to make a type assertion from interface{A()} to int (int does not implement interface{A()}).
+		if !typecheck.Implements(typ, sel.X.Type()) {
+			return
+		}
+	} else {
 		r := ir.StaticValue(sel.X)
 		if r.Op() != ir.OCONVIFACE {
 			return
@@ -53,20 +67,6 @@ func StaticCall(call *ir.CallExpr) {
 		if typ.IsInterface() {
 			return
 		}
-	} else {
-		typ = concreteType(sel.X)
-		if typ == nil {
-			return
-		}
-	}
-
-	// Don't try to devirtualize calls that we statically know that would have failed at runtime.
-	// This can happen in such case: any(0).(interface {A()}).A(), this typechecks without
-	// any errors, but will cause a runtime panic. We statically know that int(0) does not
-	// implement that interface, thus we skip the devirtualization, as it is not possible
-	// to make a type assertion from interface{A()} to int (int does not implement interface{A()}).
-	if !typecheck.Implements(typ, sel.X.Type()) {
-		return
 	}
 
 	// If typ is a shape type, then it was a type argument originally
@@ -181,11 +181,13 @@ func concreteType1(n ir.Node, seen map[*ir.Name]*types.Type) *types.Type {
 			n = n1.X
 			continue
 		case *ir.CallExpr:
-			results := n1.Fun.Type().Results()
-			if len(results) == 1 {
-				retTyp := results[0].Type
-				if !retTyp.IsInterface() {
-					return retTyp
+			if n1.Fun != nil {
+				results := n1.Fun.Type().Results()
+				if len(results) == 1 {
+					retTyp := results[0].Type
+					if !retTyp.IsInterface() {
+						return retTyp
+					}
 				}
 			}
 			return nil
@@ -313,12 +315,6 @@ func concreteType2(n ir.Node, seen map[*ir.Name]*types.Type) *types.Type {
 				if isName(p) {
 					return handleType(n.Rhs[0].Type())
 				}
-			}
-		case ir.OASOP:
-			// TODO: ignore?
-			n := n.(*ir.AssignOpStmt)
-			if isName(n.X) {
-				return true
 			}
 		case ir.OADDR:
 			n := n.(*ir.AddrExpr)
