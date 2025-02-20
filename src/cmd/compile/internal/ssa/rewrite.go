@@ -8,6 +8,7 @@ import (
 	"cmd/compile/internal/base"
 	"cmd/compile/internal/logopt"
 	"cmd/compile/internal/reflectdata"
+	"cmd/compile/internal/typecheck"
 	"cmd/compile/internal/types"
 	"cmd/internal/obj"
 	"cmd/internal/obj/s390x"
@@ -803,6 +804,21 @@ func loadLSymOffset(lsym *obj.LSym, offset int64) *obj.LSym {
 
 func devirtLECall(v *Value, sym *obj.LSym) *Value {
 	v.Op = OpStaticLECall
+	auxcall := v.Aux.(*AuxCall)
+	auxcall.Fn = sym
+	// Remove first arg
+	v.Args[0].Uses--
+	copy(v.Args[0:], v.Args[1:])
+	v.Args[len(v.Args)-1] = nil // aid GC
+	v.Args = v.Args[:len(v.Args)-1]
+	if f := v.Block.Func; f.pass.debug > 0 {
+		f.Warnl(v.Pos, "de-virtualizing call")
+	}
+	return v
+}
+
+func devirtCall(v *Value, sym *obj.LSym) *Value {
+	v.Op = OpStaticCall
 	auxcall := v.Aux.(*AuxCall)
 	auxcall.Fn = sym
 	// Remove first arg
@@ -2048,6 +2064,67 @@ func fixedSym(f *Func, sym Sym, off int64) Sym {
 	}
 	base.Fatalf("fixedSym data not known for %s:%d", sym, off)
 	return nil
+}
+
+func typeAssertInfo(t Sym) *obj.TypeAssertInfo {
+	lsym := t.(*obj.LSym)
+	if lsym.Extra != nil {
+		if v, ok := (*lsym.Extra).(*obj.TypeAssertInfo); ok {
+			return v
+		}
+	}
+	return nil
+}
+
+func typeInfo(t Sym) *obj.TypeInfo {
+	lsym := t.(*obj.LSym)
+	if lsym.Extra != nil {
+		if v, ok := (*lsym.Extra).(*obj.TypeInfo); ok {
+			return v
+		}
+	}
+	return nil
+}
+
+// typeAssertReturnsNil reports whether a type assert, is known at compile
+// time to never be satisfied, and does not cause a runime panic either.
+// (runtime.typeAssert whould have returned nil).
+func typeAssertReturnsNil(assert, typ Sym) bool {
+	typeAssertInfo := typeAssertInfo(assert)
+	typeInfo := typeInfo(typ)
+	if typeInfo == nil || typeAssertInfo == nil {
+		return false
+	}
+	if !typeAssertInfo.Type.(*types.Type).IsInterface() {
+		base.Fatalf("TypeInfo of a abi.TypeAssert Sym does not contain an interface type, but %v", typeAssertInfo)
+	}
+	return typeAssertInfo.CanFail && !typecheck.Implements(typeInfo.Type.(*types.Type), typeAssertInfo.Type.(*types.Type))
+}
+
+// canBuildStaticItab reports whether an itab can be built at compile time
+// instead of calling runtime.typeAssert.
+func canBuildStaticItab(assert, typ Sym) bool {
+	typeAssertInfo := typeAssertInfo(assert)
+	typeInfo := typeInfo(typ)
+	if typeInfo == nil || typeAssertInfo == nil {
+		return false
+	}
+	if !typeAssertInfo.Type.(*types.Type).IsInterface() {
+		base.Fatalf("TypeInfo of a abi.TypeAssert Sym does not contain an interface type, but %v", typeAssertInfo)
+	}
+	return typecheck.Implements(typeInfo.Type.(*types.Type), typeAssertInfo.Type.(*types.Type))
+}
+
+// buildStaticItab builds a static itab, from a staticaly known abi.TypeAssert and abi.Type.
+// Call to this function must be guarded by canBuildStaticItab.
+func buildStaticItab(typeAssert, typ Sym) Sym {
+	assert := typeAssertInfo(typeAssert).Type.(*types.Type)
+	t := typeInfo(typ).Type.(*types.Type)
+	return reflectdata.ITabLsym(t, assert)
+}
+
+func isTesting() bool {
+	return base.Debug.Testing != 0
 }
 
 // read8 reads one byte from the read-only global sym at offset off.

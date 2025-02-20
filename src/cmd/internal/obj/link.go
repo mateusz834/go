@@ -604,6 +604,23 @@ func (s *LSym) NewTypeInfo() *TypeInfo {
 	return t
 }
 
+// A TypeAssertInfo contains information for a symbol
+// that contains a abi.TypeAssert.
+type TypeAssertInfo struct {
+	CanFail bool
+	Type    interface{} // a *cmd/compile/internal/types.Type
+}
+
+func (s *LSym) NewTypeAssertInfo() *TypeAssertInfo {
+	if s.Extra != nil {
+		panic(fmt.Sprintf("invalid use of LSym - NewTypeAssertInfo wth Extra of type %T", *s.Extra))
+	}
+	t := new(TypeAssertInfo)
+	s.Extra = new(interface{})
+	*s.Extra = t
+	return t
+}
+
 // An ItabInfo contains information for a symbol
 // that contains a runtime.itab.
 type ItabInfo struct {

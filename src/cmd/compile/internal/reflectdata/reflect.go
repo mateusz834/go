@@ -596,9 +596,9 @@ func ITabLsym(typ, iface *types.Type) *obj.LSym {
 }
 
 func itabLsym(typ, iface *types.Type, allowNonImplement bool) *obj.LSym {
+	signatmu.Lock()
 	s, existed := ir.Pkgs.Itab.LookupOK(typ.LinkString() + "," + iface.LinkString())
 	lsym := s.Linksym()
-	signatmu.Lock()
 	if lsym.Extra == nil {
 		ii := lsym.NewItabInfo()
 		ii.Type = typ

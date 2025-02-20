@@ -749,6 +749,11 @@ func makeTypeAssertDescriptor(target *types.Type, canFail bool) *obj.LSym {
 	// When converting from an interface to a non-empty interface. Needs a runtime call.
 	// Allocate an internal/abi.TypeAssert descriptor for that call.
 	lsym := types.LocalPkg.Lookup(fmt.Sprintf(".typeAssert.%d", typeAssertGen)).LinksymABI(obj.ABI0)
+	if lsym.Extra == nil {
+		ii := lsym.NewTypeAssertInfo()
+		ii.Type = target
+		ii.CanFail = canFail
+	}
 	typeAssertGen++
 	c := rttype.NewCursor(lsym, 0, rttype.TypeAssert)
 	c.Field("Cache").WritePtr(typecheck.LookupRuntimeVar("emptyTypeAssertCache"))

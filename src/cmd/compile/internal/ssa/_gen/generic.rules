@@ -2242,6 +2242,9 @@
 // De-virtualize late-expanded interface calls into late-expanded static calls.
 (InterLECall [argsize] {auxCall} (Addr {fn} (SB)) ___) => devirtLECall(v, fn.(*obj.LSym))
 
+// De-virtualize statically known interface calls into static calls.
+(InterCall [argsize] {auxCall} (Addr {fn} (SB)) ___) => devirtCall(v, fn.(*obj.LSym))
+
 // Move and Zero optimizations.
 // Move source and destination may overlap.
 
@@ -2818,3 +2821,20 @@
   && clobber(sbts)
   && clobber(key)
 => (StaticLECall {f} [argsize] typ_ map_ (StringMake <typ.String> ptr len) mem)
+
+// Propagate static itabs through IMake
+(ITab (IMake itab:(Addr (SB)) _)) && isTesting() => itab
+
+// Build itabs, this might even allow future devirtualizing of calls.
+(StaticLECall {callAux} (Addr {typeAssert} (SB)) (Addr {staticType} sb:(SB)) mem)
+	&& isTesting()
+	&& isSameCall(callAux, "runtime.typeAssert")
+	&& canBuildStaticItab(typeAssert, staticType)
+	=> (MakeResult (Addr <typ.BytePtr> {buildStaticItab(typeAssert, staticType)} sb) mem)
+
+// Catch runtime.typeAssert calls that would have returned nil.
+(StaticLECall {callAux} (Addr {typeAssert} (SB)) (Addr {staticType} (SB)) mem)
+	&& isTesting()
+	&& isSameCall(callAux, "runtime.typeAssert")
+	&& typeAssertReturnsNil(typeAssert, staticType)
+	=> (MakeResult (ConstNil) mem)
