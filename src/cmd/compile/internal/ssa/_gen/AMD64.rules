@@ -1577,6 +1577,12 @@
 (MOVLstore [off] {sym} ptr a:((ADD|AND|OR|XOR)Lconst [c] l:(MOVLload [off] {sym} ptr2 mem)) mem)
 	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && clobber(l, a) =>
 	((ADD|AND|OR|XOR)Lconstmodify {sym} [makeValAndOff(int32(c),off)] ptr mem)
+(MOVWstore [off] {sym} ptr a:((ADD|AND|OR|XOR)Lconst [c] l:(MOVWload [off] {sym} ptr2 mem)) mem)
+	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && assertBitSize16(c) && clobber(l, a) =>
+	((ADD|AND|OR|XOR)Wconstmodify {sym} [makeValAndOff(int32(c),off)] ptr mem)
+(MOVBstore [off] {sym} ptr a:((ADD|AND|OR|XOR)Lconst [c] l:(MOVBload [off] {sym} ptr2 mem)) mem)
+	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && assertBitSize8(c) && clobber(l, a) =>
+	((ADD|AND|OR|XOR)Bconstmodify {sym} [makeValAndOff(int32(c),off)] ptr mem)
 
 // float <-> int register moves, with no conversion.
 // These come up when compiling math.{Float{32,64}bits,Float{32,64}frombits}.
