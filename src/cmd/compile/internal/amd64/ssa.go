@@ -896,6 +896,9 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 	case ssa.OpAMD64ANDQconstmodify, ssa.OpAMD64ANDLconstmodify, ssa.OpAMD64ANDWconstmodify, ssa.OpAMD64ANDBconstmodify,
 		ssa.OpAMD64ORQconstmodify, ssa.OpAMD64ORLconstmodify, ssa.OpAMD64ORWconstmodify, ssa.OpAMD64ORBconstmodify,
 		ssa.OpAMD64XORQconstmodify, ssa.OpAMD64XORLconstmodify, ssa.OpAMD64XORWconstmodify, ssa.OpAMD64XORBconstmodify,
+		ssa.OpAMD64SHLQconstmodify, ssa.OpAMD64SHLLconstmodify, ssa.OpAMD64SHLWconstmodify, ssa.OpAMD64SHLBconstmodify,
+		ssa.OpAMD64SHRQconstmodify, ssa.OpAMD64SHRLconstmodify, ssa.OpAMD64SHRWconstmodify, ssa.OpAMD64SHRBconstmodify,
+		ssa.OpAMD64SARQconstmodify, ssa.OpAMD64SARLconstmodify, ssa.OpAMD64SARWconstmodify, ssa.OpAMD64SARBconstmodify,
 		ssa.OpAMD64BTSQconstmodify, ssa.OpAMD64BTRQconstmodify, ssa.OpAMD64BTCQconstmodify:
 		sc := v.AuxValAndOff()
 		off := sc.Off64()
@@ -906,7 +909,17 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 		p.To.Type = obj.TYPE_MEM
 		p.To.Reg = v.Args[0].Reg()
 		ssagen.AddAux2(&p.To, v, off)
-
+	case ssa.OpAMD64NOTQconstmodify, ssa.OpAMD64NOTLconstmodify, ssa.OpAMD64NOTWconstmodify, ssa.OpAMD64NOTBconstmodify,
+		ssa.OpAMD64NEGQconstmodify, ssa.OpAMD64NEGLconstmodify, ssa.OpAMD64NEGWconstmodify, ssa.OpAMD64NEGBconstmodify:
+		sc := v.AuxValAndOff()
+		off := sc.Off64()
+		if sc.Val64() != 0 {
+			base.Fatalf("val of %v is not equal to 0", v.Op)
+		}
+		p := s.Prog(v.Op.Asm())
+		p.To.Type = obj.TYPE_MEM
+		p.To.Reg = v.Args[0].Reg()
+		ssagen.AddAux2(&p.To, v, off)
 	case ssa.OpAMD64MOVQstoreconst, ssa.OpAMD64MOVLstoreconst, ssa.OpAMD64MOVWstoreconst, ssa.OpAMD64MOVBstoreconst:
 		p := s.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_CONST
