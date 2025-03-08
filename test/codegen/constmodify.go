@@ -90,6 +90,26 @@ func constModifyADD() {
 	(*globalUint64Ptr) += 2 // amd64:"MOVQ.*globalUint64Ptr\\(SB\\), AX", "ADDQ.*\\$2.*(AX)"
 }
 
+func constModifySUB() {
+	globalInt8 -= 2   // amd64:"ADDB.*\\$-2.*globalInt8\\(SB\\)"
+	globalInt16 -= 2  // amd64:"ADDW.*\\$-2.*globalInt16\\(SB\\)"
+	globalInt32 -= 2  // amd64:"ADDL.*\\$-2.*globalInt32\\(SB\\)"
+	globalInt64 -= 2  // amd64:"ADDQ.*\\$-2.*globalInt64\\(SB\\)"
+	globalUint8 -= 2  // amd64:"ADDB.*\\$-2.*globalUint8\\(SB\\)"
+	globalUint16 -= 2 // amd64:"ADDW.*\\$-2.*globalUint16\\(SB\\)"
+	globalUint32 -= 2 // amd64:"ADDL.*\\$-2.*globalUint32\\(SB\\)"
+	globalUint64 -= 2 // amd64:"ADDQ.*\\$-2.*globalUint64\\(SB\\)"
+
+	(*globalInt8Ptr) -= 2   // amd64:"MOVQ.*globalInt8Ptr\\(SB\\), AX", "ADDB.*\\$-2.*(AX)"
+	(*globalInt16Ptr) -= 2  // amd64:"MOVQ.*globalInt16Ptr\\(SB\\), AX", "ADDW.*\\$-2.*(AX)"
+	(*globalInt32Ptr) -= 2  // amd64:"MOVQ.*globalInt32Ptr\\(SB\\), AX", "ADDL.*\\$-2.*(AX)"
+	(*globalInt64Ptr) -= 2  // amd64:"MOVQ.*globalInt64Ptr\\(SB\\), AX", "ADDQ.*\\$-2.*(AX)"
+	(*globalUint8Ptr) -= 2  // amd64:"MOVQ.*globalUint8Ptr\\(SB\\), AX", "ADDB.*\\$-2.*(AX)"
+	(*globalUint16Ptr) -= 2 // amd64:"MOVQ.*globalUint16Ptr\\(SB\\), AX", "ADDW.*\\$-2.*(AX)"
+	(*globalUint32Ptr) -= 2 // amd64:"MOVQ.*globalUint32Ptr\\(SB\\), AX", "ADDL.*\\$-2.*(AX)"
+	(*globalUint64Ptr) -= 2 // amd64:"MOVQ.*globalUint64Ptr\\(SB\\), AX", "ADDQ.*\\$-2.*(AX)"
+}
+
 func constModifyAND() {
 	globalInt8 &= 2   // amd64:"ANDB.*\\$2.*globalInt8\\(SB\\)"
 	globalInt16 &= 2  // amd64:"ANDW.*\\$2.*globalInt16\\(SB\\)"
@@ -190,8 +210,6 @@ func constModifySHR() {
 	(*globalUint64Ptr) >>= 2 // amd64:"MOVQ.*globalUint64Ptr\\(SB\\), AX", "SHRQ.*\\$2.*(AX)"
 }
 
-// TODO: check rules check 0-A is NEG A
-
 func constModifyNOT() {
 	globalInt8 = ^globalInt8     // amd64:"NOTB.*globalInt8\\(SB\\)"
 	globalInt16 = ^globalInt16   // amd64:"NOTW.*globalInt16\\(SB\\)"
@@ -230,4 +248,12 @@ func constModifyNEG() {
 	(*globalUint16Ptr) = -(*globalUint16Ptr) // amd64:"MOVQ.*globalUint16Ptr\\(SB\\), AX", "NEGW.*(AX)"
 	(*globalUint32Ptr) = -(*globalUint32Ptr) // amd64:"MOVQ.*globalUint32Ptr\\(SB\\), AX", "NEGL.*(AX)"
 	(*globalUint64Ptr) = -(*globalUint64Ptr) // amd64:"MOVQ.*globalUint64Ptr\\(SB\\), AX", "NEGQ.*(AX)"
+}
+
+var boolean = false
+var booleanPtr = &boolean
+
+func constModifyNEGBool() {
+	boolean = !boolean             // amd64:"XORB.*\\$1.*boolean\\(SB\\)"
+	(*booleanPtr) = !(*booleanPtr) // amd64:"MOVQ.*booleanPtr\\(SB\\), AX", "XORB.*\\$1.*(AX)"
 }
