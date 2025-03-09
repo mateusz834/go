@@ -1571,12 +1571,40 @@
 (MOVWQZX (MOVBQZX x)) => (MOVBQZX x)
 (MOVBQZX (MOVBQZX x)) => (MOVBQZX x)
 
-(MOVQstore [off] {sym} ptr a:((ADD|AND|OR|XOR)Qconst [c] l:(MOVQload [off] {sym} ptr2 mem)) mem)
+// Combine Load, OPconst then Store into an OPconstmodify.
+(MOVQstore [off] {sym} ptr a:((ADD|AND|OR|XOR|SHL|SHR|SAR)Qconst [c] l:(MOVQload [off] {sym} ptr2 mem)) mem)
 	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && clobber(l, a) =>
-	((ADD|AND|OR|XOR)Qconstmodify {sym} [makeValAndOff(int32(c),off)] ptr mem)
-(MOVLstore [off] {sym} ptr a:((ADD|AND|OR|XOR)Lconst [c] l:(MOVLload [off] {sym} ptr2 mem)) mem)
+	((ADD|AND|OR|XOR|SHL|SHR|SAR)Qconstmodify {sym} [makeValAndOff(int32(c),off)] ptr mem)
+(MOVLstore [off] {sym} ptr a:((ADD|AND|OR|XOR|SHL|SHR|SAR)Lconst [c] l:(MOVLload [off] {sym} ptr2 mem)) mem)
 	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && clobber(l, a) =>
-	((ADD|AND|OR|XOR)Lconstmodify {sym} [makeValAndOff(int32(c),off)] ptr mem)
+	((ADD|AND|OR|XOR|SHL|SHR|SAR)Lconstmodify {sym} [makeValAndOff(int32(c),off)] ptr mem)
+
+(MOVWstore [off] {sym} ptr a:((ADD|AND|OR|XOR|SHL)Lconst [c] l:(MOVWload [off] {sym} ptr2 mem)) mem)
+	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && assertBitSize16(int32(c)) && clobber(l, a) =>
+	((ADD|AND|OR|XOR|SHL)Wconstmodify {sym} [makeValAndOff(int32(c),off)] ptr mem)
+(MOVBstore [off] {sym} ptr a:((ADD|AND|OR|XOR|SHL)Lconst [c] l:(MOVBload [off] {sym} ptr2 mem)) mem)
+	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && assertBitSize8(int32(c)) && clobber(l, a) =>
+	((ADD|AND|OR|XOR|SHL)Bconstmodify {sym} [makeValAndOff(int32(c),off)] ptr mem)
+
+(MOVWstore [off] {sym} ptr a:((SHR|SAR)Wconst [c] l:(MOVWload [off] {sym} ptr2 mem)) mem)
+	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && clobber(l, a) =>
+	((SHR|SAR)Wconstmodify {sym} [makeValAndOff(int32(c),off)] ptr mem)
+(MOVBstore [off] {sym} ptr a:((SHR|SAR)Bconst [c] l:(MOVBload [off] {sym} ptr2 mem)) mem)
+	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && clobber(l, a) =>
+	((SHR|SAR)Bconstmodify {sym} [makeValAndOff(int32(c),off)] ptr mem)
+
+(MOVQstore [off] {sym} ptr a:((NOT|NEG)Q l:(MOVQload [off] {sym} ptr2 mem)) mem)
+	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && clobber(l, a) =>
+	((NOT|NEG)Qconstmodify {sym} [makeValAndOff(0,off)] ptr mem)
+(MOVLstore [off] {sym} ptr a:((NOT|NEG)L l:(MOVLload [off] {sym} ptr2 mem)) mem)
+	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && clobber(l, a) =>
+	((NOT|NEG)Lconstmodify {sym} [makeValAndOff(0,off)] ptr mem)
+(MOVWstore [off] {sym} ptr a:((NOT|NEG)L l:(MOVWload [off] {sym} ptr2 mem)) mem)
+	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && clobber(l, a) =>
+	((NOT|NEG)Wconstmodify {sym} [makeValAndOff(0,off)] ptr mem)
+(MOVBstore [off] {sym} ptr a:((NOT|NEG)L l:(MOVBload [off] {sym} ptr2 mem)) mem)
+	&& isSamePtr(ptr, ptr2) && a.Uses == 1 && l.Uses == 1 && clobber(l, a) =>
+	((NOT|NEG)Bconstmodify {sym} [makeValAndOff(0,off)] ptr mem)
 
 // float <-> int register moves, with no conversion.
 // These come up when compiling math.{Float{32,64}bits,Float{32,64}frombits}.

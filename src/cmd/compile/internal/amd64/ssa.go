@@ -854,23 +854,36 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 		p.From.Reg = v.Args[2].Reg()
 		memIdx(&p.To, v)
 		ssagen.AddAux(&p.To, v)
-	case ssa.OpAMD64ADDQconstmodify, ssa.OpAMD64ADDLconstmodify:
+	case ssa.OpAMD64ADDQconstmodify, ssa.OpAMD64ADDLconstmodify, ssa.OpAMD64ADDWconstmodify, ssa.OpAMD64ADDBconstmodify:
 		sc := v.AuxValAndOff()
 		off := sc.Off64()
 		val := sc.Val()
 		if val == 1 || val == -1 {
 			var asm obj.As
-			if v.Op == ssa.OpAMD64ADDQconstmodify {
+			switch v.Op {
+			case ssa.OpAMD64ADDQconstmodify:
 				if val == 1 {
 					asm = x86.AINCQ
 				} else {
 					asm = x86.ADECQ
 				}
-			} else {
+			case ssa.OpAMD64ADDLconstmodify:
 				if val == 1 {
 					asm = x86.AINCL
 				} else {
 					asm = x86.ADECL
+				}
+			case ssa.OpAMD64ADDWconstmodify:
+				if val == 1 {
+					asm = x86.AINCW
+				} else {
+					asm = x86.ADECW
+				}
+			case ssa.OpAMD64ADDBconstmodify:
+				if val == 1 {
+					asm = x86.AINCB
+				} else {
+					asm = x86.ADECB
 				}
 			}
 			p := s.Prog(asm)
@@ -880,8 +893,12 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 			break
 		}
 		fallthrough
-	case ssa.OpAMD64ANDQconstmodify, ssa.OpAMD64ANDLconstmodify, ssa.OpAMD64ORQconstmodify, ssa.OpAMD64ORLconstmodify,
-		ssa.OpAMD64XORQconstmodify, ssa.OpAMD64XORLconstmodify,
+	case ssa.OpAMD64ANDQconstmodify, ssa.OpAMD64ANDLconstmodify, ssa.OpAMD64ANDWconstmodify, ssa.OpAMD64ANDBconstmodify,
+		ssa.OpAMD64ORQconstmodify, ssa.OpAMD64ORLconstmodify, ssa.OpAMD64ORWconstmodify, ssa.OpAMD64ORBconstmodify,
+		ssa.OpAMD64XORQconstmodify, ssa.OpAMD64XORLconstmodify, ssa.OpAMD64XORWconstmodify, ssa.OpAMD64XORBconstmodify,
+		ssa.OpAMD64SHLQconstmodify, ssa.OpAMD64SHLLconstmodify, ssa.OpAMD64SHLWconstmodify, ssa.OpAMD64SHLBconstmodify,
+		ssa.OpAMD64SHRQconstmodify, ssa.OpAMD64SHRLconstmodify, ssa.OpAMD64SHRWconstmodify, ssa.OpAMD64SHRBconstmodify,
+		ssa.OpAMD64SARQconstmodify, ssa.OpAMD64SARLconstmodify, ssa.OpAMD64SARWconstmodify, ssa.OpAMD64SARBconstmodify,
 		ssa.OpAMD64BTSQconstmodify, ssa.OpAMD64BTRQconstmodify, ssa.OpAMD64BTCQconstmodify:
 		sc := v.AuxValAndOff()
 		off := sc.Off64()
@@ -892,7 +909,17 @@ func ssaGenValue(s *ssagen.State, v *ssa.Value) {
 		p.To.Type = obj.TYPE_MEM
 		p.To.Reg = v.Args[0].Reg()
 		ssagen.AddAux2(&p.To, v, off)
-
+	case ssa.OpAMD64NOTQconstmodify, ssa.OpAMD64NOTLconstmodify, ssa.OpAMD64NOTWconstmodify, ssa.OpAMD64NOTBconstmodify,
+		ssa.OpAMD64NEGQconstmodify, ssa.OpAMD64NEGLconstmodify, ssa.OpAMD64NEGWconstmodify, ssa.OpAMD64NEGBconstmodify:
+		sc := v.AuxValAndOff()
+		off := sc.Off64()
+		if sc.Val64() != 0 {
+			base.Fatalf("val of %v is not equal to 0", v.Op)
+		}
+		p := s.Prog(v.Op.Asm())
+		p.To.Type = obj.TYPE_MEM
+		p.To.Reg = v.Args[0].Reg()
+		ssagen.AddAux2(&p.To, v, off)
 	case ssa.OpAMD64MOVQstoreconst, ssa.OpAMD64MOVLstoreconst, ssa.OpAMD64MOVWstoreconst, ssa.OpAMD64MOVBstoreconst:
 		p := s.Prog(v.Op.Asm())
 		p.From.Type = obj.TYPE_CONST

@@ -2554,3 +2554,17 @@ func isDirectIface2(v *Value, depth int) bool {
 	}
 	return false
 }
+
+func assertBitSize8(val int32) bool {
+	if val != int32(int8(val)) {
+		base.Fatalf("val = %v does not fit in 8 bits", val)
+	}
+	return true
+}
+
+func assertBitSize16(val int32) bool {
+	if val != int32(int16(val)) {
+		base.Fatalf("val = %v does not fit in 16 bits", val)
+	}
+	return true
+}
