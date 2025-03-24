@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	"cmd/compile/internal/ssa/ssaparser"
 	"cmd/internal/hash"
 	"cmd/internal/src"
 )
@@ -100,6 +101,21 @@ func StmtString(p src.XPos) string {
 	return linenumber
 }
 
+func StmtString2(p src.XPos) string {
+	linenumber := "?"
+	if p.IsKnown() {
+		pfx := ""
+		if p.IsStmt() == src.PosIsStmt {
+			pfx = "+"
+		}
+		if p.IsStmt() == src.PosNotStmt {
+			pfx = "-"
+		}
+		linenumber = fmt.Sprintf("%s%d ", pfx, p.Line())
+	}
+	return linenumber
+}
+
 func (p stringFuncPrinter) value(v *Value, live bool) {
 	if !p.printDead && !live {
 		return
@@ -123,8 +139,16 @@ func (p stringFuncPrinter) named(n LocalSlot, vals []*Value) {
 }
 
 func fprintFunc(p funcPrinter, f *Func) {
-	reachable, live := findlive(f)
-	defer f.Cache.freeBoolSlice(live)
+	//reachable, live := findlive(f)
+	reachable := make([]bool, f.NumBlocks())
+	live := make([]bool, f.NumValues())
+	for i := range reachable {
+		reachable[i] = true
+	}
+	for i := range live {
+		live[i] = true
+	}
+	//defer f.Cache.freeBoolSlice(live)
 	p.header(f)
 	printed := make([]bool, f.NumValues())
 	for _, b := range f.Blocks {
@@ -189,4 +213,101 @@ func fprintFunc(p funcPrinter, f *Func) {
 	for _, name := range f.Names {
 		p.named(*name, f.NamedValues[*name])
 	}
+}
+
+func fprintFunc2(f *Func) *ssaparser.Func {
+	fun := &ssaparser.Func{}
+	value := func(val *Value) *ssaparser.Value {
+		args := []string{}
+		for _, arg := range val.Args {
+			args = append(args, fmt.Sprintf("v%v", arg.ID))
+		}
+		return &ssaparser.Value{
+			Pos:  StmtString2(val.Pos),
+			Name: fmt.Sprintf("v%v", val.ID),
+			Op:   val.Op.String(),
+			Type: val.Type.String(),
+			Aux:  val.auxString(),
+			Args: args,
+		}
+	}
+
+	printed := make([]bool, f.NumValues())
+	for _, b := range f.Blocks {
+		controls := []string{}
+		for _, c := range b.ControlValues() {
+			controls = append(controls, fmt.Sprintf("v%v", c.ID))
+		}
+
+		succ := []string{}
+		for _, s := range b.Succs {
+			succ = append(succ, fmt.Sprintf("b%v", s.b.ID))
+		}
+
+		pred := []string{}
+		for _, p := range b.Preds {
+			pred = append(pred, fmt.Sprintf("b%v", p.b.ID))
+		}
+
+		block := &ssaparser.Block{
+			Name:     fmt.Sprintf("b%v", b.ID),
+			Kind:     b.Kind.String(),
+			Controls: controls,
+
+			Preds: pred,
+			Succ:  succ,
+		}
+		fun.Blocks = append(fun.Blocks, block)
+
+		if f.scheduled {
+			// Order of Values has been decided - print in that order.
+			for _, v := range b.Values {
+				block.Values = append(block.Values, value(v))
+			}
+			continue
+		}
+
+		// print phis first since all value cycles contain a phi
+		n := 0
+		for _, v := range b.Values {
+			if v.Op != OpPhi {
+				continue
+			}
+			block.Values = append(block.Values, value(v))
+			printed[v.ID] = true
+			n++
+		}
+
+		// print rest of values in dependency order
+		for n < len(b.Values) {
+			m := n
+		outer:
+			for _, v := range b.Values {
+				if printed[v.ID] {
+					continue
+				}
+				for _, w := range v.Args {
+					// w == nil shouldn't happen, but if it does,
+					// don't panic; we'll get a better diagnosis later.
+					if w != nil && w.Block == b && !printed[w.ID] {
+						continue outer
+					}
+				}
+				block.Values = append(block.Values, value(v))
+				printed[v.ID] = true
+				n++
+			}
+			if m == n {
+				for _, v := range b.Values {
+					if printed[v.ID] {
+						continue
+					}
+					block.Values = append(block.Values, value(v))
+					printed[v.ID] = true
+					n++
+				}
+			}
+		}
+	}
+	return fun
 }
