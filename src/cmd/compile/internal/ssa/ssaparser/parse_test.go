@@ -9,24 +9,6 @@ import (
 	"testing"
 )
 
-const test = `
-b1:
-  (?) v1 = ConstBool <bool> [false]
-  (?) v2 = InitMem <mem> v1 v1
-  (?) v2 = InitMem <mem> v1 v1
-  If v1 -> b2 b3
-b2: <- b1
-  (?) v22 = Phi <int8> v1 v16
-  (?) v2 = InitMem <mem> v1 v1
-  Plain -> b4
-b3: <- b1
-  (?) v2 = InitMem <mem> v1 v1
-  Plain -> b4
-b4: <- b2 b3
-  (?) v2 = InitMem <mem> [1] {main} v1 v1
-  Exit v2
-`
-
 func TestParse(t *testing.T) {
 	const testdir = "./testdata/"
 	files, err := os.ReadDir(testdir)
@@ -55,6 +37,7 @@ func TestParse(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			got = append(got, '\n')
 
 			if !ok {
 				// Test file has only the SSA part, generate the expect part.
@@ -65,19 +48,9 @@ func TestParse(t *testing.T) {
 			}
 
 			if !bytes.Equal(expect, got) {
-				t.Fatalf("got:\n%v\nwant:\n%v", got, expect)
+				t.Errorf("got:\n%s\nwant:\n%s", got, expect)
+				//t.Fatalf("diff:\n%s", diff.Diff("expect", expect, "got", got))
 			}
 		})
 	}
-
-	f, err := ParseSSAFunc(test)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	out, err := json.MarshalIndent(f, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("%s", out)
 }

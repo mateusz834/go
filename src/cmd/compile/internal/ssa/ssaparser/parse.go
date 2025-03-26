@@ -3,7 +3,6 @@ package ssaparser
 import (
 	"fmt"
 	"math"
-	"slices"
 	"strings"
 	"text/scanner"
 )
@@ -11,15 +10,14 @@ import (
 // TODO: make sure that the order of Preds in blocks is the same as would be created by AddEdge.
 
 func ParseSSAFunc(s string) (*Func, error) {
-	p := &parser{
-		lines: slices.Collect(strings.Lines(s)),
-		tok:   eol,
-	}
-
-	// skip empty lines
-	for p.tok == eol {
-		p.next()
-	}
+	var p parser
+	// TODO: error handle
+	p.s.Init(strings.NewReader(s))
+	p.src = s
+	p.s.Mode = scanner.GoTokens &^ scanner.SkipComments
+	p.s.Filename = "ssa"
+	p.pos.Line = 1
+	p.next()
 
 	blocks, err := p.blocks()
 	if err != nil {
@@ -32,14 +30,15 @@ func ParseSSAFunc(s string) (*Func, error) {
 }
 
 type parser struct {
-	lines []string
-
-	s      scanner.Scanner
-	lineNo int
+	src string
+	s   scanner.Scanner
 
 	tok rune
 	lit string
 	pos scanner.Position
+
+	prevTok rune
+	prevEOL bool
 
 	prevEOF bool
 }
@@ -53,36 +52,46 @@ func tokenString(tok rune) string {
 	return scanner.TokenString(tok)
 }
 
-func (p *parser) nextLine() {
-	var line string
-	if len(p.lines) != 0 {
-		line = p.lines[0]
-		p.lines = p.lines[1:]
+func (p *parser) next0() {
+	//defer func() {
+	//	fmt.Printf("next(): %v %q %v\n", tokenString(p.tok), p.lit, p.pos)
+	//}()
+
+	prevTokLine := p.pos.Line
+	tok := p.prevTok
+	if !p.prevEOL {
+		tok = p.s.Scan()
 	}
-	p.s.Init(strings.NewReader(line))
-	p.s.Mode = scanner.GoTokens &^ scanner.SkipComments
-	p.s.Filename = "ssa"
-	p.lineNo++
+
+	if prevTokLine == p.s.Line {
+		p.tok = tok
+		p.lit = p.s.TokenText()
+		p.pos = p.s.Position
+		p.prevEOL = false
+		return
+	}
+
+	p.prevTok = tok
+	p.prevEOL = true
+	p.tok = eol
+	p.lit = ""
+	p.pos = p.s.Position
 }
 
+// Allow "// comments" directly before EOL or after EOL.
 func (p *parser) next() {
-	if p.tok == eol {
-		p.nextLine()
-	}
-	p.tok = p.s.Scan()
-	p.lit = p.s.TokenText()
-	p.pos = p.s.Position
-	p.pos.Line += p.lineNo
-	if p.tok == scanner.EOF {
-		p.tok = eol
-	}
-	//fmt.Printf("%v %q %v\n", tokenString(p.tok), p.lit, p.pos)
+	p.next0()
+	//for {
+	//	p.next0()
+	//	if p.tok == scanner.Comment {
+	//		continue
+	//	}
+	//}
 }
 
 func (p *parser) blocks() ([]*Block, error) {
 	var blocks []*Block
 	for p.tok == scanner.Ident {
-		fmt.Printf("p.tok: %v\n", p.tok)
 		b, err := p.block()
 		if err != nil {
 			return nil, err
@@ -154,7 +163,6 @@ func (p *parser) values() ([]*Value, error) {
 	var values []*Value
 	for p.tok == '(' {
 		b, err := p.value()
-		//fmt.Printf("%#v %v", b, err)
 		if err != nil {
 			return nil, fmt.Errorf("value: %v", err)
 		}
@@ -205,6 +213,16 @@ outer:
 	}
 
 	args := p.idents()
+
+	names := ""
+	if p.tok == '(' {
+		names, err = p.between('(', ')')
+		if err != nil {
+			return nil, fmt.Errorf("parsing aux: %v", err)
+		}
+	}
+	_ = names
+
 	if err := p.expectTok(eol); err != nil {
 		return nil, err
 	}
@@ -233,12 +251,18 @@ func (p *parser) between(l, r rune) (string, error) {
 	if err := p.expectTok(l); err != nil {
 		return "", err
 	}
-	lit := p.lit
-	p.next()
+
+	startOff := p.pos.Offset
+	for p.tok != r && p.tok != eol {
+		p.next()
+	}
+	endOff := p.pos.Offset
+
 	if err := p.expectTok(r); err != nil {
 		return "", err
 	}
-	return lit, nil
+
+	return p.src[startOff:endOff], nil
 }
 
 func (p *parser) expect(got, want rune) error {
