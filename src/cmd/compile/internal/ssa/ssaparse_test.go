@@ -18,7 +18,6 @@ func TestParseSSA(t *testing.T) {
 
 	var s = `
 b1:
-
     (?) v1 = InitMem <mem>
     (?) v7 = Arg <bool> {a} (a[bool])
     (?) v8 = Arg <bool> {b} (b[bool])
@@ -48,11 +47,15 @@ Plain -> b2
 		},
 	}
 
-	f := cc.BuildSSAFunc(s).f
-	phiopt(f)
-	fuseLate(f)
-	t.Log(ssaparser.PrintFunc(fprintFunc2(f)))
-	checkFunc(f)
+	f := cc.BuildSSAFunc(s)
+	t.Log(f.values["v7"].LongString())
+	t.Log(cc.SSA(f))
+
+	phiopt(f.f)
+	fuseLate(f.f)
+	//t.Log(ssaparser.PrintFunc(fprintFunc2(f)))
+	checkFunc(f.f)
+	t.Log(cc.SSA(f))
 }
 
 type opInfoCode struct {
@@ -383,6 +386,9 @@ func (c *TestFuncCfg) mapAux(op Op, auxInt, aux string) (int64, Aux, error) {
 		}
 		return 0, nil, nil
 	case auxSymOff:
+		if v, ok := c.aux[aux]; ok {
+			return 0, v, nil
+		}
 		return 0, nil, nil
 	default:
 		panic(fmt.Sprintf("unexpected auxType: %v", opcodeTable[op].auxType))
@@ -406,6 +412,11 @@ func (c *TestFuncCfg) Frontend() Frontend {
 
 // TODO: we need differentiate aliases from real blocks IDs. and  disallow real block IDs as aliases.
 func (c *TestFuncCfg) SSA(tf *TestFunc) string {
+	auxMap := make(map[Aux]string)
+	for k, v := range c.aux {
+		auxMap[v] = k
+	}
+
 	f := &ssaparser.Func{}
 	for _, block := range tf.f.Blocks {
 		b := &ssaparser.Block{
@@ -426,19 +437,15 @@ func (c *TestFuncCfg) SSA(tf *TestFunc) string {
 
 		for _, value := range block.Values {
 			v := &ssaparser.Value{
-				Pos:    "",
-				Name:   tf.valueName(value),
-				Op:     value.Op.String(),
-				Type:   value.Type.String(),
-				Aux:    "",
-				AuxInt: "",
-				Args:   []string{},
+				Pos:  "",
+				Name: tf.valueName(value),
+				Op:   value.Op.String(),
+				Type: value.Type.String(),
+				Args: []string{},
 			}
 
-			for k, vv := range tf.cfg.aux {
-				if vv == value.Aux {
-					v.Aux = k
-				}
+			if err := fillAux(auxMap, value, v); err != nil {
+				c.tb.Fatalf("value %v: %v", v.Name, err)
 			}
 
 			b.Values = append(b.Values, v)
@@ -447,13 +454,9 @@ func (c *TestFuncCfg) SSA(tf *TestFunc) string {
 	return ssaparser.PrintFunc(f)
 }
 
-type stringAuxRepr struct {
-	AuxInt string
-	Aux    string
-}
-
-func fillAux(v *Value, v2 *ssaparser.Value) {
+func fillAux(auxMap map[Aux]string, v *Value, v2 *ssaparser.Value) error {
 	switch opcodeTable[v.Op].auxType {
+	case auxNone:
 	case auxBool:
 		if v.AuxInt == 0 {
 			v2.AuxInt = "false"
@@ -472,91 +475,39 @@ func fillAux(v *Value, v2 *ssaparser.Value) {
 		v2.AuxInt = strconv.FormatUint(uint64(v.AuxUInt8()), 10)
 	case auxString:
 		v2.Aux = fmt.Sprintf("%q", v.Aux)
-	case auxSym, auxCall, auxTyp:
+	case auxTyp:
 		if v.Aux != nil {
-			return stringAuxRepr{Aux: fmt.Sprintf("%v", v.Aux)}
+			v2.Aux = v.Aux.(*types.Type).String()
 		}
-		return stringAuxRepr{}
-	case auxSymOff, auxCallOff, auxTypSize, auxNameOffsetInt8:
-		var aux stringAuxRepr
-		if v.Aux != nil {
-			aux.Aux = fmt.Sprintf("%v", v.Aux)
+	case auxSym, auxCall:
+		var ok bool
+		v2.Aux, ok = auxMap[v.Aux]
+		if !ok {
+			return fmt.Errorf("not able to map aux: %v", v.Aux)
+		}
+	case auxSymOff, auxCallOff, auxNameOffsetInt8:
+		var ok bool
+		v2.Aux, ok = auxMap[v.Aux]
+		if !ok {
+			return fmt.Errorf("not able to map aux: %v", v.Aux)
 		}
 		if v.AuxInt != 0 || opcodeTable[v.Op].auxType == auxNameOffsetInt8 {
-			aux.AuxInt = fmt.Sprintf("%v", v.AuxInt)
+			v2.AuxInt = strconv.FormatInt(v.AuxInt, 10)
 		}
-		return aux
+	case auxTypSize:
+		v2.Aux = v.Aux.(*types.Type).String()
+		if v.AuxInt != 0 {
+			v2.AuxInt = strconv.FormatInt(v.AuxInt, 10)
+		}
 	case auxSymValAndOff:
-		var aux stringAuxRepr
-		if v.Aux != nil {
-			aux.Aux = fmt.Sprintf("%v", v.Aux)
+		var ok bool
+		v2.Aux, ok = auxMap[v.Aux]
+		if !ok {
+			return fmt.Errorf("not able to map aux: %v", v.Aux)
 		}
-		aux.AuxInt = fmt.Sprintf("%s", v.AuxValAndOff())
-		return aux
-	case auxNone:
+		v2.AuxInt = fmt.Sprintf("%s", v.AuxValAndOff())
 	default:
-		// If you see this, add a case above instead.
-		return stringAuxRepr{AuxInt: fmt.Sprintf("auxtype=%d AuxInt=%d Aux=%v", opcodeTable[v.Op].auxType, v.AuxInt, v.Aux)}
+		panic("unreachable")
 	}
-}
-
-func auxAsString(v *Value) stringAuxRepr {
-	switch opcodeTable[v.Op].auxType {
-	case auxBool:
-		if v.AuxInt == 0 {
-			return stringAuxRepr{AuxInt: "false"}
-		} else {
-			return stringAuxRepr{AuxInt: "true"}
-		}
-	case auxInt8:
-		return stringAuxRepr{AuxInt: strconv.FormatInt(int64(v.AuxInt8()), 10)}
-	case auxInt16:
-		return stringAuxRepr{AuxInt: strconv.FormatInt(int64(v.AuxInt16()), 10)}
-	case auxInt32:
-		return stringAuxRepr{AuxInt: strconv.FormatInt(int64(v.AuxInt32()), 10)}
-	case auxInt64, auxInt128:
-		return stringAuxRepr{AuxInt: strconv.FormatInt(v.AuxInt, 10)}
-	case auxUInt8:
-		return stringAuxRepr{AuxInt: strconv.FormatUint(uint64(v.AuxUInt8()), 10)}
-	case auxARM64BitField:
-		lsb := v.AuxArm64BitField().lsb()
-		width := v.AuxArm64BitField().width()
-		return stringAuxRepr{AuxInt: fmt.Sprintf("lsb=%d,width=%d", lsb, width)}
-	case auxFloat32, auxFloat64:
-		return stringAuxRepr{AuxInt: fmt.Sprintf("%g", v.AuxFloat())}
-	case auxString:
-		return stringAuxRepr{Aux: fmt.Sprintf("%q", v.Aux)}
-	case auxSym, auxCall, auxTyp:
-		if v.Aux != nil {
-			return stringAuxRepr{Aux: fmt.Sprintf("%v", v.Aux)}
-		}
-		return stringAuxRepr{}
-	case auxSymOff, auxCallOff, auxTypSize, auxNameOffsetInt8:
-		var aux stringAuxRepr
-		if v.Aux != nil {
-			aux.Aux = fmt.Sprintf("%v", v.Aux)
-		}
-		if v.AuxInt != 0 || opcodeTable[v.Op].auxType == auxNameOffsetInt8 {
-			aux.AuxInt = fmt.Sprintf("%v", v.AuxInt)
-		}
-		return aux
-	case auxSymValAndOff:
-		var aux stringAuxRepr
-		if v.Aux != nil {
-			aux.Aux = fmt.Sprintf("%v", v.Aux)
-		}
-		aux.AuxInt = fmt.Sprintf("%s", v.AuxValAndOff())
-		return aux
-	case auxCCop:
-		return stringAuxRepr{AuxInt: fmt.Sprintf("%s", Op(v.AuxInt))}
-	case auxS390XCCMask, auxS390XRotateParams:
-		return stringAuxRepr{Aux: fmt.Sprintf("%v", v.Aux)}
-	case auxFlagConstant:
-		return stringAuxRepr{Aux: fmt.Sprintf("%s", flagConstant(v.AuxInt))}
-	case auxNone:
-		return stringAuxRepr{}
-	default:
-		// If you see this, add a case above instead.
-		return stringAuxRepr{AuxInt: fmt.Sprintf("auxtype=%d AuxInt=%d Aux=%v", opcodeTable[v.Op].auxType, v.AuxInt, v.Aux)}
-	}
+	return nil
 }
