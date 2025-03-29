@@ -5,6 +5,8 @@ type Func struct {
 }
 
 type Block struct {
+	Entry bool
+
 	Name  string
 	Preds []string
 

@@ -112,6 +112,19 @@ func (p *parser) block() (*Block, error) {
 		return nil, err
 	}
 
+	entry := false
+	if p.tok == '(' {
+		m, err := p.between('(', ')')
+		if err != nil {
+			return nil, err
+		}
+		if m == "entry" {
+			entry = true
+		} else {
+			return nil, fmt.Errorf("unexpected value between (): %q", m)
+		}
+	}
+
 	var preds []string
 	if p.tok == '<' {
 		p.next()
@@ -150,6 +163,7 @@ func (p *parser) block() (*Block, error) {
 	}
 
 	return &Block{
+		Entry:    entry,
 		Name:     blockName,
 		Preds:    preds,
 		Values:   vals,

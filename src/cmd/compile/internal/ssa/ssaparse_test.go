@@ -13,11 +13,14 @@ import (
 	"testing"
 )
 
+// TODO: would be nice to have SSA-only tests (like below)
+// AND full tests that also store in files
+
 func TestParseSSA(t *testing.T) {
 	c := testConfig(t)
 
 	var s = `
-b1:
+b1: (entry)
     (?) v1 = InitMem <mem>
     (?) v7 = Arg <bool> {a} (a[bool])
     (?) v8 = Arg <bool> {b} (b[bool])
@@ -39,6 +42,8 @@ Plain -> b2
 	cc := TestFuncCfg{
 		config: c.config,
 		tb:     t,
+
+		// TODO: serialize aux? Lsym && Name?
 		aux: map[string]Aux{
 			"a": &obj.LSym{Name: "a"},
 			"b": &obj.LSym{Name: "b"},
@@ -56,6 +61,7 @@ Plain -> b2
 	//t.Log(ssaparser.PrintFunc(fprintFunc2(f)))
 	checkFunc(f.f)
 	t.Log(cc.SSA(f))
+	t.Log(f.blockName(f.f.Entry))
 }
 
 type opInfoCode struct {
@@ -80,7 +86,7 @@ func init() {
 	}
 }
 
-func defaultTypes(c Types) map[string]*types.Type {
+func defaultTestTypes(c Types) map[string]*types.Type {
 	return map[string]*types.Type{
 		"bool":     c.Bool,
 		"int8":     c.Int8,
@@ -105,14 +111,14 @@ func defaultTypes(c Types) map[string]*types.Type {
 		"*float32": c.Float32Ptr,
 		"*float64": c.Float64Ptr,
 		"**byte":   c.BytePtrPtr,
+
+		"mem":    types.TypeMem,
+		"flags":  types.TypeFlags,
+		"int128": types.TypeInt128,
 	}
 }
 
 func (t *TestFuncCfg) typ(typ string) *types.Type {
-	if typ == "mem" {
-		return types.TypeMem
-	}
-
 	tt := t.types[typ]
 	if tt != nil {
 		return tt
@@ -168,7 +174,7 @@ func (t *TestFunc) valueName(v *Value) string {
 
 func (c *TestFuncCfg) BuildSSAFunc(ssa string) *TestFunc {
 	c.tb.Helper()
-	c.types = defaultTypes(c.config.Types)
+	c.types = defaultTestTypes(c.config.Types)
 	tf, err := c.buildSSAFunc(ssa)
 	if err != nil {
 		c.tb.Fatalf("failed to build SSA func: %v", err)
@@ -206,8 +212,10 @@ func (c *TestFuncCfg) buildSSAFunc(ssa string) (*TestFunc, error) {
 		b := f.NewBlock(blockKind)
 		blocks[block.Name] = b
 
-		// Treat first block as entry.
-		if f.Entry == nil {
+		if block.Entry {
+			if f.Entry != nil {
+				return nil, fmt.Errorf("second entry node: %v", block.Name)
+			}
 			f.Entry = b
 			if len(block.Preds) != 0 {
 				return nil, fmt.Errorf("entry block: %v has unexpected predecessors", block.Name)
@@ -235,6 +243,10 @@ func (c *TestFuncCfg) buildSSAFunc(ssa string) (*TestFunc, error) {
 			v.AuxInt = intAux
 			v.Aux = aux
 		}
+	}
+
+	if f.Entry == nil {
+		return nil, fmt.Errorf("missing entry node")
 	}
 
 	// Populate (*Block).Controls.
@@ -420,8 +432,9 @@ func (c *TestFuncCfg) SSA(tf *TestFunc) string {
 	f := &ssaparser.Func{}
 	for _, block := range tf.f.Blocks {
 		b := &ssaparser.Block{
-			Name: tf.blockName(block),
-			Kind: block.Kind.String(),
+			Name:  tf.blockName(block),
+			Kind:  block.Kind.String(),
+			Entry: block == tf.f.Entry,
 		}
 		f.Blocks = append(f.Blocks, b)
 

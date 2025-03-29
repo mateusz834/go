@@ -38,6 +38,10 @@ func writeBlock(s *strings.Builder, b *Block) {
 		}
 	}
 
+	if b.Entry {
+		s.WriteString(" (entry)")
+	}
+
 	for _, v := range b.Values {
 		s.WriteString("\n    ")
 		writeValue(s, v)
