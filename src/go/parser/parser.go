@@ -30,6 +30,7 @@ import (
 	"go/build/constraint"
 	"go/scanner"
 	"go/token"
+	"maps"
 	"strings"
 )
 
@@ -454,6 +455,12 @@ var exprEnd = map[token.Token]bool{
 	token.RBRACK:    true,
 	token.RBRACE:    true,
 }
+
+var stmtStartOrExprEnd = func() map[token.Token]bool {
+	out := maps.Clone(stmtStart)
+	maps.Insert(out, maps.All(exprEnd))
+	return out
+}()
 
 // ----------------------------------------------------------------------------
 // Identifiers
@@ -1502,7 +1509,7 @@ func (p *parser) parseOperand() ast.Expr {
 	// we have an error
 	pos := p.pos
 	p.errorExpected(pos, "operand")
-	p.advance(stmtStart)
+	p.advance(stmtStartOrExprEnd)
 	return &ast.BadExpr{From: pos, To: p.pos}
 }
 
@@ -1667,6 +1674,27 @@ func (p *parser) parseElement() ast.Expr {
 	if p.tok == token.COLON {
 		colon := p.pos
 		p.next()
+		//if p.tok == token.COMMA || p.tok == token.RBRACE {
+		//	// Handle specially for better error recovery of:
+		//	//
+		//	//	someStruct{
+		//	// 		Field:
+		//	// 	}
+		//	//
+		//	//	someStruct{
+		//	// 		Field: ,
+		//	// 	}
+		//	//
+		//	//	someStruct{
+		//	// 		Field: ,
+		//	//		OtherField: 123,
+		//	// 	}
+		//	//
+		//	p.errorExpected(p.pos, "operand")
+		//	x = &ast.KeyValueExpr{Key: x, Colon: colon, Value: &ast.BadExpr{From: colon + 1, To: p.pos}}
+		//} else {
+		//	x = &ast.KeyValueExpr{Key: x, Colon: colon, Value: p.parseValue()}
+		//}
 		x = &ast.KeyValueExpr{Key: x, Colon: colon, Value: p.parseValue()}
 	}
 

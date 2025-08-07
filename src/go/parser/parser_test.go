@@ -896,3 +896,64 @@ func test() {
 		t.Fatalf("unexpected f.Comments got:\n%v\nwant:\n%v", got.String(), want.String())
 	}
 }
+
+// TODO: add framework for error-recovery testing with ast.Print()
+// i.e. snapshot testing that has errors printed and the AST.
+
+//func TestCompositeLiteralErrorRecovery(t *testing.T) {
+//	cases := []struct {
+//		src    string
+//		fields []string
+//	}{
+//		{
+//			src: "someStruct{Field:}",
+//		},
+//		{
+//			src: "someStruct{Field:,}",
+//		},
+//		{
+//			src: "someStruct{Field: ,}",
+//		},
+//		{
+//			src: "someStruct{Field: , OtherField: 123}",
+//		},
+//
+//		{
+//			src: "someStruct{Field: a.b., OtherField: 123}",
+//		},
+//	}
+//
+//	for i, tt := range cases {
+//		t.Run(fmt.Sprintf("%v", i), func(t *testing.T) {
+//			src := "package test; func main() { _ = " + tt.src + "}"
+//			fset := token.NewFileSet()
+//			f, err := ParseFile(fset, "", src, SkipObjectResolution|ParseComments)
+//			if err != nil {
+//				t.Log(err)
+//			}
+//
+//			ast.Print(fset, f)
+//
+//			//compLit := f.Decls[0].(*ast.FuncDecl).Body.List[0].(*ast.AssignStmt).Rhs[0].(*ast.CompositeLit)
+//			//compLit.Elts.(*ast.KeyValueExpr).
+//		})
+//	}
+//}
+//
+//func TestTest(t *testing.T) {
+//	const src = `package p
+//func f() {
+//	switch _ = range x; true {}
+//}
+//`
+//
+//	fset := token.NewFileSet()
+//	f, err := ParseFile(fset, "", src, SkipObjectResolution)
+//	if err != nil {
+//		for _, err := range err.(scanner.ErrorList) {
+//			t.Log(err)
+//		}
+//	}
+//
+//	ast.Print(fset, f)
+//}

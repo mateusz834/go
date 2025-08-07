@@ -134,7 +134,7 @@ var invalids = []string{
 	`package p; func f() { if ; /* ERROR "missing condition" */ {} };`,
 	`package p; func f() { if f(); /* ERROR "missing condition" */ {} };`,
 	`package p; func f() { if _ = range /* ERROR "expected operand" */ x; true {} };`,
-	`package p; func f() { switch _ /* ERROR "expected switch expression" */ = range x; true {} };`,
+	`package p; func f() { switch _ = range /* ERROR "expected operand, found 'range'" */ x; true {} };`,
 	`package p; func f() { for _ = range x ; /* ERROR "expected '{'" */ ; {} };`,
 	`package p; func f() { for ; ; _ = range /* ERROR "expected operand" */ x {} };`,
 	`package p; func f() { for ; _ /* ERROR "expected boolean or range expression" */ = range x ; {} };`,
