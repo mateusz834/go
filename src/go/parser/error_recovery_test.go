@@ -221,7 +221,7 @@ func TestTesting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(src)
+	t.Logf("got: %q", src)
 	checkErrors2(t, src)
 }
 
@@ -237,6 +237,12 @@ func TestTesting(t *testing.T) {
 // reported anymore it will be removed.
 func insertErrors(src string) (string, error) {
 	src = removeErrorComments(src) // TODO: inline
+
+	// TODO: when there is no newline at the end of file
+	// and implied semi is true, then the parse inserts an semi with '\n'
+	// at the same position.
+	//
+	// Soooo, if we detected that? And only inserted one space in such cases?
 
 	// Insert a space before every token.
 	// TODO: explain why.
@@ -254,12 +260,18 @@ func insertErrors(src string) (string, error) {
 			pos, tok, lit := s.Scan()
 			fmt.Printf("tok: %v %v %q\n", pos, tok, lit)
 			off := file.Offset(pos)
-			if tok == token.EOF {
-				break
+
+			// Don't include fake spaces before EOF tokens and SEMICOLON tokens causes by EOF.
+			if tok == token.EOF || (tok == token.SEMICOLON && lit == "\n" && off == len(src)) {
+				break // We can break here since, both cases signal that we have reached the end of file.
 			}
+
 			out.WriteString(src[lastOff:off])
 			out.WriteString(" ") // fake space
 			lastOff = off
+			//if tok == token.EOF {
+			//	break
+			//}
 		}
 		out.WriteString(src[lastOff:])
 		src = out.String()
@@ -272,6 +284,10 @@ func insertErrors(src string) (string, error) {
 		fset := token.NewFileSet()
 		f, err := ParseFile(fset, "", src, SkipObjectResolution|ParseComments|AllErrors)
 		errs, _ := err.(scanner.ErrorList)
+
+		for _, v := range errs {
+			fmt.Printf("v: %v\n", v)
+		}
 
 		file := token.NewFileSet().AddFile("", -1, len(src))
 		var s scanner.Scanner
@@ -291,7 +307,7 @@ func insertErrors(src string) (string, error) {
 			for len(errs) != 0 {
 				errOff := errs[0].Pos.Offset
 				errMsg := errs[0].Msg
-				if tok == token.EOF && off == errOff {
+				if (tok == token.EOF || (tok == token.SEMICOLON && lit == "\n" && off == len(src))) && off == errOff {
 					out.WriteString(src[lastOff:errOff])
 					out.WriteString("/*ERROR AFTER ")
 					out.WriteString(errMsg)
@@ -329,7 +345,8 @@ func insertErrors(src string) (string, error) {
 					return "", fmt.Errorf("insertErrors: not able to insert error at: %v", f.Position(f.Pos(errOff)))
 				}
 			}
-			fmt.Printf("out.String(): %v %q\n", tok, out.String())
+
+			fmt.Printf("out.String(): %q\n", out.String())
 
 			prev = off
 			tokLength := len(lit)
@@ -348,7 +365,6 @@ func insertErrors(src string) (string, error) {
 		}
 
 		out.WriteString(src[lastOff:])
-		out.WriteString(" ")
 		src = out.String()
 	}
 
@@ -369,20 +385,15 @@ func insertErrors(src string) (string, error) {
 			if tok == token.COMMENT && errorRx.MatchString(lit) {
 				continue
 			}
-			if tok == token.EOF {
-				break
+			if tok == token.EOF || (tok == token.SEMICOLON && lit == "\n" && off == len(src)) {
+				break // We can break here since, both cases signal that we have reached the end of file.
 			}
-
-			fmt.Printf("src[off]: %v %q\n", tok, src[off-1])
-
 			out.WriteString(src[lastOff : off-1])
 			lastOff = off
 		}
 		out.WriteString(src[lastOff:])
 		src = out.String()
 	}
-
-	fmt.Printf("final src: %q\n", src)
 
 	return src, nil
 }
