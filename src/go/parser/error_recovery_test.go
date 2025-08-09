@@ -110,7 +110,7 @@ func checkErrors2(t *testing.T, src string) {
 	file := token.NewFileSet().AddFile("", -1, len(src))
 	var s scanner.Scanner
 	s.Init(file, []byte(src), func(pos token.Position, msg string) {
-		panic("unreachable: " + msg + src)
+		panic(fmt.Sprintf("unreachable %v %q", msg, src))
 	}, scanner.ScanComments)
 
 	var wantErrs scanner.ErrorList
@@ -128,18 +128,31 @@ outer:
 		case token.COMMENT:
 			s := errorRx.FindStringSubmatch(lit)
 			if len(s) == 3 {
-				if s[1] == "HERE" {
+				switch s[1] {
+				case "HERE":
 					off = here // position right after the previous token prior to comment
-				} else if s[1] == "AFTER" {
+				case "AFTER":
 					off += len(lit) // end of comment
-				} else {
+				default:
 					off = prev // token prior to comment
+					if strings.HasPrefix(s[1], "+") {
+						num, err := strconv.ParseInt(s[1][1:], 10, 64)
+						if err != nil {
+							t.Fatalf("malformed error comment: %v", err)
+						}
+						off += int(num)
+					}
+				}
+
+				msg, err := strconv.Unquote(s[2])
+				if err != nil {
+					t.Fatalf("malformed error comment: %v", err)
 				}
 
 				prevAfterErrs = append(prevAfterErrs, len(wantErrs))
 				wantErrs = append(wantErrs, &scanner.Error{
 					Pos: file.Position(file.Pos(off)),
-					Msg: s[2],
+					Msg: msg,
 				})
 
 				if s[1] == "AFTER" {
@@ -164,6 +177,7 @@ outer:
 	}
 
 	if !slices.EqualFunc(gotErrs, wantErrs, func(x, y *scanner.Error) bool { return *x == *y }) {
+		// TODO: print as strings and to a diff.
 		t.Error("difference in errors")
 		for _, v := range gotErrs {
 			t.Logf("got: %v", v)
@@ -207,6 +221,11 @@ func FuzzInsertErrors(f *testing.F) {
 			return
 		}
 
+		// TODO: exmplain
+		if strings.ContainsRune(src, '\r') {
+			return
+		}
+
 		file := token.NewFileSet().AddFile("", -1, len(src))
 		var s scanner.Scanner
 		s.Init(file, []byte(src), func(pos token.Position, msg string) {
@@ -214,10 +233,15 @@ func FuzzInsertErrors(f *testing.F) {
 		}, scanner.ScanComments)
 
 		for {
-			_, tok, _ := s.Scan()
+			_, tok, lit := s.Scan()
 			if tok == token.COMMENT {
 				// TODO: investigate
+				// TODO: maybe only allow /* */ comments, and only disallow // comments???
+				// TODO: transform // comments into /**/ ?
 				return // skip for now
+			}
+			if tok == token.STRING && (strings.Contains(lit, "*/") || strings.Contains(lit, "/*")) {
+				return
 			}
 			if tok == token.EOF {
 				break
@@ -230,15 +254,27 @@ func FuzzInsertErrors(f *testing.F) {
 		}
 
 		checkErrors2(t, out)
+
+		//out2, err := insertErrors(out)
+		//if err != nil {
+		//	t.Fatal(err)
+		//}
+
+		//if out2 != out {
+		//	t.Fatal("not idempotent")
+		//}
 	})
 }
 
 func TestTesting(t *testing.T) {
-	src, err := insertErrors("//")
+	//src, err := insertErrors("`\n`0") // TODO
+	//src, err := insertErrors("package A; func a(a){defer 0")
+	src, err := insertErrors(`package A;func _(){defer A.type}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("got: %q", src)
+
+	t.Logf("got: %v", src)
 	checkErrors2(t, src)
 }
 
@@ -247,6 +283,7 @@ func TestTesting(t *testing.T) {
 //
 // Inserts following ERROR comments:
 // - /*ERROR msg*/ - position of the previous token
+// - /*ERROR +1 msg*/ - position of the previous token plus the specified offset.
 // - /*ERROR AFTER msg*/ - position right after the previous token
 // - /*ERROR HERE msg*/ - end of comment
 //
@@ -261,7 +298,7 @@ func insertErrors(src string) (string, error) {
 		file := token.NewFileSet().AddFile("", -1, len(src))
 		var s scanner.Scanner
 		s.Init(file, []byte(src), func(pos token.Position, msg string) {
-			panic("unreachable: " + msg)
+			panic(fmt.Sprintf("unreachable %q", src))
 		}, scanner.ScanComments)
 
 		lastOff := 0
@@ -282,12 +319,18 @@ func insertErrors(src string) (string, error) {
 		}
 		out.WriteString(src[lastOff:])
 		src = out.String()
+		if len(src) == 0 || src[len(src)-1] != ' ' {
+			// TODO: think
+			src += " "
+		}
 	}
 
-	// Insert ERROR comments
+	fmt.Printf("after semi insertion: %q\n", src)
+
+	// Insert ERROR comments.
 	{
 		fset := token.NewFileSet()
-		f, err := ParseFile(fset, "", src, SkipObjectResolution|ParseComments|AllErrors)
+		_, err := ParseFile(fset, "", src, SkipObjectResolution|ParseComments|AllErrors)
 		errs, _ := err.(scanner.ErrorList)
 
 		file := token.NewFileSet().AddFile("", -1, len(src))
@@ -306,13 +349,14 @@ func insertErrors(src string) (string, error) {
 		for {
 			pos, tok, lit := s.Scan()
 			off := file.Offset(pos)
+			fmt.Printf("TOK: %v %v %q\n", off, tok, lit)
 			for len(errs) != 0 {
 				errOff := errs[0].Pos.Offset
 				errMsg := errs[0].Msg
 				if (tok == token.EOF || (tok == token.SEMICOLON && lit == "\n" && off == len(src))) && off == errOff {
 					out.WriteString(src[lastOff:errOff])
 					out.WriteString("/*ERROR AFTER ")
-					out.WriteString(errMsg)
+					out.WriteString(strconv.Quote(errMsg))
 					out.WriteString("*/")
 					lastOff = errOff
 					errs = errs[1:]
@@ -322,7 +366,7 @@ func insertErrors(src string) (string, error) {
 						out.WriteString(" ")
 					}
 					out.WriteString("/*ERROR ")
-					out.WriteString(errMsg)
+					out.WriteString(strconv.Quote(errMsg))
 					out.WriteString("*/")
 					lastOff = here
 					errs = errs[1:]
@@ -332,7 +376,7 @@ func insertErrors(src string) (string, error) {
 						out.WriteString(" ")
 					}
 					out.WriteString("/*ERROR HERE ")
-					out.WriteString(errMsg)
+					out.WriteString(strconv.Quote(errMsg))
 					out.WriteString("*/")
 					out.WriteString(src[errOff:off])
 					lastOff = off
@@ -343,17 +387,31 @@ func insertErrors(src string) (string, error) {
 						out.WriteString(" ")
 					}
 					out.WriteString("/*ERROR AFTER ")
-					out.WriteString(errMsg)
+					out.WriteString(strconv.Quote(errMsg))
 					out.WriteString("*/")
 					lastOff = errOff
 					errs = errs[1:]
 				} else if errOff >= off {
 					break // We will place this error next time.
+				} else if errOff > prev && errOff < here {
+					// It would be nice if the parse did not produce such
+					// errors where the position is in the middle of a token.
+					// Currently it might produce such errors, for example:
+					//	func _(){defer A.type}
+					out.WriteString(src[lastOff:here])
+					if prevTok == token.QUO {
+						out.WriteString(" ")
+					}
+					out.WriteString("/*ERROR ")
+					out.WriteString("+")
+					out.WriteString(strconv.FormatInt(int64(errOff-prev), 10))
+					out.WriteString(" ")
+					out.WriteString(strconv.Quote(errMsg))
+					out.WriteString("*/")
+					lastOff = here
+					errs = errs[1:]
 				} else {
-					// Reaching here, likely means a bug in the parser, since parser should not report errors
-					// with Positions in the middle of a token.
-					f := fset.File(f.FileEnd)
-					return "", fmt.Errorf("insertErrors: not able to insert error at: %v", f.Position(f.Pos(errOff)))
+					panic("unreachable")
 				}
 			}
 
@@ -408,7 +466,7 @@ func insertErrors(src string) (string, error) {
 	return src, nil
 }
 
-var errorRx = regexp.MustCompile(`/\*ERROR *(HERE|AFTER)? (.*)\*/`)
+var errorRx = regexp.MustCompile(`^(?s)/\*ERROR(?: (HERE|AFTER|\+\d+))? (.*)\*/$`)
 
 // removeErrorComments removes all ERROR comments from src.
 func removeErrorComments(src string) string {
@@ -475,6 +533,7 @@ func runFilter(filter string, f *ast.File) (any, error) {
 	}
 
 	// TODO: use go/printer to print the location where the error occurred.
+	// TODO: or just use x.End() and print directly.
 
 	var elem func(val reflect.Value) reflect.Value
 	elem = func(val reflect.Value) reflect.Value {
