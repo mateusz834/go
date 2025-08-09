@@ -100,6 +100,8 @@ func TestErrorRecovery(t *testing.T) {
 	}
 }
 
+var errorRx = regexp.MustCompile(`^(?s)/\*ERROR(?: (HERE|AFTER|\+\d+))? (.*)\*/$`)
+
 func checkErrors2(t *testing.T, src string) {
 	t.Helper()
 
@@ -290,7 +292,36 @@ func TestTesting(t *testing.T) {
 // The input source might already contain ERROR comments, if that error is not
 // reported anymore it will be removed.
 func insertErrors(src string) (string, error) {
-	src = removeErrorComments(src) // TODO: inline
+	// Remove existing ERROR comments.
+	{
+		file := token.NewFileSet().AddFile("", -1, len(src))
+
+		var s scanner.Scanner
+		s.Init(file, []byte(src), func(pos token.Position, msg string) {
+			panic("unreachable")
+		}, scanner.ScanComments)
+
+		var out strings.Builder
+
+		lastOff := 0
+	outer:
+		for {
+			pos, tok, lit := s.Scan()
+			off := file.Offset(pos)
+			switch tok {
+			case token.EOF:
+				break outer
+			case token.COMMENT:
+				if errorRx.MatchString(lit) {
+					out.WriteString(src[lastOff:off])
+					lastOff = off + len(lit)
+				}
+			}
+		}
+
+		out.WriteString(src[lastOff:])
+		src = out.String()
+	}
 
 	// Insert a space before every token.
 	// TODO: explain why.
@@ -325,9 +356,7 @@ func insertErrors(src string) (string, error) {
 		}
 	}
 
-	fmt.Printf("after semi insertion: %q\n", src)
-
-	// Insert ERROR comments.
+	// Parse file and insert ERROR comments.
 	{
 		fset := token.NewFileSet()
 		_, err := ParseFile(fset, "", src, SkipObjectResolution|ParseComments|AllErrors)
@@ -349,7 +378,6 @@ func insertErrors(src string) (string, error) {
 		for {
 			pos, tok, lit := s.Scan()
 			off := file.Offset(pos)
-			fmt.Printf("TOK: %v %v %q\n", off, tok, lit)
 			for len(errs) != 0 {
 				errOff := errs[0].Pos.Offset
 				errMsg := errs[0].Msg
@@ -464,39 +492,6 @@ func insertErrors(src string) (string, error) {
 	}
 
 	return src, nil
-}
-
-var errorRx = regexp.MustCompile(`^(?s)/\*ERROR(?: (HERE|AFTER|\+\d+))? (.*)\*/$`)
-
-// removeErrorComments removes all ERROR comments from src.
-func removeErrorComments(src string) string {
-	file := token.NewFileSet().AddFile("", -1, len(src))
-
-	var s scanner.Scanner
-	s.Init(file, []byte(src), func(pos token.Position, msg string) {
-		panic("unreachable")
-	}, scanner.ScanComments)
-
-	var out strings.Builder
-
-	lastOff := 0
-outer:
-	for {
-		pos, tok, lit := s.Scan()
-		off := file.Offset(pos)
-		switch tok {
-		case token.EOF:
-			break outer
-		case token.COMMENT:
-			if errorRx.MatchString(lit) {
-				out.WriteString(src[lastOff:off])
-				lastOff = off + len(lit)
-			}
-		}
-	}
-
-	out.WriteString(src[lastOff:])
-	return out.String()
 }
 
 // tryTokenize runs the scanner over the entire src and reports
