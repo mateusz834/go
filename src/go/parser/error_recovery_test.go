@@ -171,7 +171,7 @@ outer:
 			prevAfterErrs = prevAfterErrs[:0]
 			prev = off
 			tokLength := len(lit)
-			if !tok.IsLiteral() {
+			if !tok.IsLiteral() && tok != token.COMMENT {
 				tokLength = len(tok.String())
 			}
 			here = prev + tokLength
@@ -271,7 +271,8 @@ func FuzzInsertErrors(f *testing.F) {
 func TestTesting(t *testing.T) {
 	//src, err := insertErrors("`\n`0") // TODO
 	//src, err := insertErrors("package A; func a(a){defer 0")
-	src, err := insertErrors(`package A;func _(){defer A.type}`)
+	//src, err := insertErrors(`package A;func _(){defer A.type}`)
+	src, err := insertErrors("package A)type![0%0/")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -339,7 +340,6 @@ func insertErrors(src string) (string, error) {
 			pos, tok, lit := s.Scan()
 			off := file.Offset(pos)
 
-			// Don't include fake spaces before EOF tokens and SEMICOLON tokens causes by EOF.
 			if tok == token.EOF || (tok == token.SEMICOLON && lit == "\n" && off == len(src)) {
 				break // We can break here since, both cases signal that we have reached the end of file.
 			}
@@ -349,11 +349,8 @@ func insertErrors(src string) (string, error) {
 			lastOff = off
 		}
 		out.WriteString(src[lastOff:])
+		out.WriteString(" ") // artificial space before EOF
 		src = out.String()
-		if len(src) == 0 || src[len(src)-1] != ' ' {
-			// TODO: think
-			src += " "
-		}
 	}
 
 	// Parse file and insert ERROR comments.
@@ -383,6 +380,9 @@ func insertErrors(src string) (string, error) {
 				errMsg := errs[0].Msg
 				if (tok == token.EOF || (tok == token.SEMICOLON && lit == "\n" && off == len(src))) && off == errOff {
 					out.WriteString(src[lastOff:errOff])
+					if prevTok == token.QUO {
+						out.WriteString(" ")
+					}
 					out.WriteString("/*ERROR AFTER ")
 					out.WriteString(strconv.Quote(errMsg))
 					out.WriteString("*/")
@@ -419,8 +419,6 @@ func insertErrors(src string) (string, error) {
 					out.WriteString("*/")
 					lastOff = errOff
 					errs = errs[1:]
-				} else if errOff >= off {
-					break // We will place this error next time.
 				} else if errOff > prev && errOff < here {
 					// It would be nice if the parse did not produce such
 					// errors where the position is in the middle of a token.
@@ -438,6 +436,8 @@ func insertErrors(src string) (string, error) {
 					out.WriteString("*/")
 					lastOff = here
 					errs = errs[1:]
+				} else if errOff >= off {
+					break // We will place this error next time.
 				} else {
 					panic("unreachable")
 				}
@@ -445,7 +445,7 @@ func insertErrors(src string) (string, error) {
 
 			prev = off
 			tokLength := len(lit)
-			if !tok.IsLiteral() {
+			if !tok.IsLiteral() && tok != token.COMMENT {
 				tokLength = len(tok.String())
 			}
 			here = prev + tokLength
@@ -489,6 +489,50 @@ func insertErrors(src string) (string, error) {
 		}
 		out.WriteString(src[lastOff:])
 		src = out.String()
+	}
+
+	// Another artificial space removal run, to remove the last space (before EOF).
+	// We handle it specially, because when ERROR comments are inserted, the fake
+	// space we inserted at EOF, might be before/in-between ERROR comments.
+	{
+		file := token.NewFileSet().AddFile("", -1, len(src))
+		var s scanner.Scanner
+		s.Init(file, []byte(src), func(pos token.Position, msg string) {
+			panic("unreachable: " + msg)
+		}, scanner.ScanComments)
+
+		lastSpacePos := -1
+		prevEndOff := 0
+		for {
+			pos, tok, lit := s.Scan()
+			off := file.Offset(pos)
+
+			white := src[prevEndOff:off]
+			for _, c := range white {
+				switch c {
+				case ' ', '\t', '\n', '\r', '\ufeff':
+				default:
+					panic("unreachable: " + strconv.QuoteRune(c))
+				}
+			}
+
+			i := strings.LastIndexByte(white, ' ')
+			if i != -1 {
+				lastSpacePos = prevEndOff + i
+			}
+
+			tokLength := len(lit)
+			if !tok.IsLiteral() && tok != token.COMMENT {
+				tokLength = len(tok.String())
+			}
+			prevEndOff = min(off+tokLength, len(src))
+
+			if tok == token.EOF {
+				break
+			}
+		}
+
+		src = src[:lastSpacePos] + src[lastSpacePos+1:]
 	}
 
 	return src, nil
