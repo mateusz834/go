@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/scanner"
 	"go/token"
+	"internal/diff"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -236,12 +237,13 @@ func FuzzInsertErrors(f *testing.F) {
 
 		for {
 			_, tok, lit := s.Scan()
-			if tok == token.COMMENT {
+			if tok == token.COMMENT && (strings.HasPrefix(lit, "//") || strings.Contains(lit, "\n")) {
 				// TODO: investigate
 				// TODO: maybe only allow /* */ comments, and only disallow // comments???
 				// TODO: transform // comments into /**/ ?
 				return // skip for now
 			}
+			// TODO: move that to insertErrors?
 			if tok == token.STRING && (strings.Contains(lit, "*/") || strings.Contains(lit, "/*")) {
 				return
 			}
@@ -257,14 +259,16 @@ func FuzzInsertErrors(f *testing.F) {
 
 		checkErrors2(t, out)
 
-		//out2, err := insertErrors(out)
-		//if err != nil {
-		//	t.Fatal(err)
-		//}
+		out2, err := insertErrors(out)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-		//if out2 != out {
-		//	t.Fatal("not idempotent")
-		//}
+		if out2 != out {
+			t.Errorf("not idempotent")
+			diff := diff.Diff("insertErrors(src)", []byte(out), "insertErrors(insertErrors(src))", []byte(out2))
+			t.Errorf("diff:\n%s", diff)
+		}
 	})
 }
 
@@ -272,13 +276,25 @@ func TestTesting(t *testing.T) {
 	//src, err := insertErrors("`\n`0") // TODO
 	//src, err := insertErrors("package A; func a(a){defer 0")
 	//src, err := insertErrors(`package A;func _(){defer A.type}`)
-	src, err := insertErrors("package A)type![0%0/")
+	src, err := insertErrors("package A;/")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Logf("got: %v", src)
+	t.Logf("got: %q", src)
 	checkErrors2(t, src)
+
+	src2, err := insertErrors(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("got2: %q", src2)
+
+	if src != src2 {
+		t.Errorf("not idempotent")
+		diff := diff.Diff("insertErrors(src)", []byte(src), "insertErrors(insertErrors(src))", []byte(src2))
+		t.Errorf("diff:\n%s", diff)
+	}
 }
 
 // insertErrors returns a modified src, such that it contatins every error
@@ -290,7 +306,7 @@ func TestTesting(t *testing.T) {
 // - /*ERROR AFTER msg*/ - position right after the previous token
 // - /*ERROR HERE msg*/ - end of comment
 //
-// The input source might already contain ERROR comments, if that error is not
+// The input source might already contain ERROR comments, if an error is not
 // reported anymore it will be removed.
 func insertErrors(src string) (string, error) {
 	// Remove existing ERROR comments.
@@ -305,6 +321,7 @@ func insertErrors(src string) (string, error) {
 		var out strings.Builder
 
 		lastOff := 0
+		prevTok := token.ILLEGAL
 	outer:
 		for {
 			pos, tok, lit := s.Scan()
@@ -314,10 +331,17 @@ func insertErrors(src string) (string, error) {
 				break outer
 			case token.COMMENT:
 				if errorRx.MatchString(lit) {
-					out.WriteString(src[lastOff:off])
+					if prevTok == token.QUO && src[off-1] == ' ' {
+						// Make sure insertErrors is idempotent.
+						// Skip space, this is likely ours.
+						out.WriteString(src[lastOff : off-1])
+					} else {
+						out.WriteString(src[lastOff:off])
+					}
 					lastOff = off + len(lit)
 				}
 			}
+			prevTok = tok
 		}
 
 		out.WriteString(src[lastOff:])
@@ -341,7 +365,9 @@ func insertErrors(src string) (string, error) {
 			off := file.Offset(pos)
 
 			if tok == token.EOF || (tok == token.SEMICOLON && lit == "\n" && off == len(src)) {
-				break // We can break here since, both cases signal that we have reached the end of file.
+				// We can break here since, both cases signal that we have reached the end of file.
+				// We do such so we don't end up with two fake spaces in a row.
+				break
 			}
 
 			out.WriteString(src[lastOff:off])
@@ -382,6 +408,7 @@ func insertErrors(src string) (string, error) {
 					out.WriteString(src[lastOff:errOff])
 					if prevTok == token.QUO {
 						out.WriteString(" ")
+						prevTok = token.ILLEGAL
 					}
 					out.WriteString("/*ERROR AFTER ")
 					out.WriteString(strconv.Quote(errMsg))
@@ -392,6 +419,7 @@ func insertErrors(src string) (string, error) {
 					out.WriteString(src[lastOff:here])
 					if prevTok == token.QUO {
 						out.WriteString(" ")
+						prevTok = token.ILLEGAL
 					}
 					out.WriteString("/*ERROR ")
 					out.WriteString(strconv.Quote(errMsg))
@@ -402,6 +430,7 @@ func insertErrors(src string) (string, error) {
 					out.WriteString(src[lastOff:errOff])
 					if prevTok == token.QUO {
 						out.WriteString(" ")
+						prevTok = token.ILLEGAL
 					}
 					out.WriteString("/*ERROR HERE ")
 					out.WriteString(strconv.Quote(errMsg))
@@ -413,6 +442,7 @@ func insertErrors(src string) (string, error) {
 					out.WriteString(src[lastOff:errOff])
 					if prevTok == token.QUO {
 						out.WriteString(" ")
+						prevTok = token.ILLEGAL
 					}
 					out.WriteString("/*ERROR AFTER ")
 					out.WriteString(strconv.Quote(errMsg))
@@ -427,6 +457,7 @@ func insertErrors(src string) (string, error) {
 					out.WriteString(src[lastOff:here])
 					if prevTok == token.QUO {
 						out.WriteString(" ")
+						prevTok = token.ILLEGAL
 					}
 					out.WriteString("/*ERROR ")
 					out.WriteString("+")
@@ -507,6 +538,11 @@ func insertErrors(src string) (string, error) {
 			pos, tok, lit := s.Scan()
 			off := file.Offset(pos)
 
+			tokLength := len(lit)
+			if !tok.IsLiteral() && tok != token.COMMENT {
+				tokLength = len(tok.String())
+			}
+
 			white := src[prevEndOff:off]
 			for _, c := range white {
 				switch c {
@@ -521,10 +557,6 @@ func insertErrors(src string) (string, error) {
 				lastSpacePos = prevEndOff + i
 			}
 
-			tokLength := len(lit)
-			if !tok.IsLiteral() && tok != token.COMMENT {
-				tokLength = len(tok.String())
-			}
 			prevEndOff = min(off+tokLength, len(src))
 
 			if tok == token.EOF {
