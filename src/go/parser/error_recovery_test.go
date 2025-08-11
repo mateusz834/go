@@ -12,9 +12,11 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 var update = flag.Bool("update", false, "")
@@ -103,11 +105,17 @@ func TestErrorRecovery(t *testing.T) {
 
 var errorRx = regexp.MustCompile(`^(?s)/\*ERROR(?: (HERE|AFTER|\+\d+))? (.*)\*/$`)
 
-func checkErrors2(t *testing.T, src string) {
+func checkErrors2(t *testing.T, src string /*reportErrs func(src string) scanner.ErrorList*/) {
 	t.Helper()
+	//if reportErrs == nil {
+	//	reportErrs = func(src string) scanner.ErrorList {
+	//		_, err := ParseFile(token.NewFileSet(), "", src, SkipObjectResolution|ParseComments|AllErrors)
+	//		errs, _ := err.(scanner.ErrorList)
+	//		return errs
+	//	}
+	//}
 
-	fset := token.NewFileSet()
-	_, err := ParseFile(fset, "", src, ParseComments|SkipObjectResolution|AllErrors)
+	_, err := ParseFile(token.NewFileSet(), "", src, SkipObjectResolution|ParseComments|AllErrors)
 	gotErrs, _ := err.(scanner.ErrorList)
 
 	file := token.NewFileSet().AddFile("", -1, len(src))
@@ -193,26 +201,26 @@ outer:
 
 // TODO; fuzz test insertErrors.
 
-func fuzzAddDir(f *testing.F, testdata string) {
-	files, err := os.ReadDir(testdata)
-	if err != nil {
-		f.Fatal(err)
-	}
-	for _, v := range files {
-		if v.IsDir() {
-			continue
-		}
-
-		testFile := filepath.Join(testdata, v.Name())
-		content, err := os.ReadFile(testFile)
+func FuzzInsertErrors(f *testing.F) {
+	fuzzAddDir := func(f *testing.F, testdata string) {
+		files, err := os.ReadDir(testdata)
 		if err != nil {
 			f.Fatal(err)
 		}
-		f.Add(string(content))
-	}
-}
+		for _, v := range files {
+			if v.IsDir() {
+				continue
+			}
 
-func FuzzInsertErrors(f *testing.F) {
+			testFile := filepath.Join(testdata, v.Name())
+			content, err := os.ReadFile(testFile)
+			if err != nil {
+				f.Fatal(err)
+			}
+			f.Add(string(content))
+		}
+	}
+
 	fuzzAddDir(f, ".")
 	fuzzAddDir(f, "./testdata")
 	f.Fuzz(func(t *testing.T, src string) {
@@ -220,41 +228,109 @@ func FuzzInsertErrors(f *testing.F) {
 			t.Logf("source:\n%q", src)
 		}
 
-		if tryTokenize(src) != nil {
-			return
-		}
+		//type parseError struct {
+		//	tokenNum int
+		//	tokenOff int
+		//	message  string
+		//}
 
-		// TODO: exmplain
-		if strings.ContainsRune(src, '\r') {
-			return
-		}
+		//// Parse errors
+		//// In a format:
+		//// "TokenNum:TokenOff message"
+		//var parseErrors []parseError
+		//{
+		//	for line := range strings.SplitSeq(errors, "\n") {
+		//		pos, msg, ok := strings.Cut(line, " ")
+		//		if !ok {
+		//			return // invalid error list
+		//		}
 
-		file := token.NewFileSet().AddFile("", -1, len(src))
-		var s scanner.Scanner
-		s.Init(file, []byte(src), func(pos token.Position, msg string) {
-			panic("unreachable: " + msg)
-		}, scanner.ScanComments)
+		//		tokenNumStr, tokenOffStr, ok := strings.Cut(pos, ":")
+		//		if !ok {
+		//			return // invalid error list
+		//		}
 
-		for {
-			_, tok, lit := s.Scan()
-			if tok == token.COMMENT && (strings.HasPrefix(lit, "//") || strings.Contains(lit, "\n")) {
-				// TODO: investigate
-				// TODO: maybe only allow /* */ comments, and only disallow // comments???
-				// TODO: transform // comments into /**/ ?
-				return // skip for now
-			}
-			// TODO: move that to insertErrors?
-			if tok == token.STRING && (strings.Contains(lit, "*/") || strings.Contains(lit, "/*")) {
-				return
-			}
-			if tok == token.EOF {
-				break
-			}
-		}
+		//		tokenNum, err := strconv.ParseUint(tokenNumStr, 10, 31)
+		//		if err != nil {
+		//			return // invalid error list
+		//		}
+		//		tokenOff, err := strconv.ParseUint(tokenOffStr, 10, 31)
+		//		if err != nil {
+		//			return // invalid error list
+		//		}
+
+		//		parseErrors = append(parseErrors, parseError{
+		//			tokenNum: int(tokenNum),
+		//			tokenOff: int(tokenOff),
+		//			message:  msg,
+		//		})
+
+		//		slices.SortStableFunc(parseErrors, func(x, y parseError) int {
+		//			return cmp.Or(
+		//				cmp.Compare(x.tokenNum, y.tokenNum),
+		//				cmp.Compare(x.tokenOff, y.tokenOff),
+		//			)
+		//		})
+		//	}
+		//}
+
+		//fakeParseFile := func(src string) scanner.ErrorList {
+		//	parseErrors := slices.Clone(parseErrors)
+
+		//	// Parser can place an error at:
+		//	// - Any position within a token (also including impliedSemi SEMICOLON tokens).
+		//	// - Directly after a token.
+
+		//	var out scanner.ErrorList
+		//	file := token.NewFileSet().AddFile("", -1, len(src))
+		//	var s scanner.Scanner
+		//	s.Init(file, []byte(src), func(pos token.Position, msg string) {
+		//		panic(fmt.Sprintf("unreachable %q", src))
+		//	}, scanner.ScanComments)
+
+		//	for tokNum := 0; true; tokNum++ {
+		//		pos, tok, lit := s.Scan()
+		//		off := file.Offset(pos)
+
+		//		tokLength := len(lit)
+		//		if !tok.IsLiteral() && tok != token.COMMENT && tok != token.EOF {
+		//			tokLength = len(tok.String())
+		//		}
+
+		//		for len(parseErrors) != 0 {
+		//			e := parseErrors[0]
+		//			if e.tokenNum == tokNum {
+		//				if e.tokenOff <= tokLength {
+		//					out = append(out, &scanner.Error{
+		//						Pos: file.Position(file.Pos(off + e.tokenOff)),
+		//						Msg: e.message,
+		//					})
+		//					parseErrors = parseErrors[1:]
+		//				} else {
+		//					t.Skip()
+		//				}
+		//			}
+		//		}
+
+		//		if tok == token.EOF {
+		//			break
+		//		}
+		//	}
+
+		//	if len(parseErrors) != 0 {
+		//		t.Skip()
+		//	}
+
+		//	return out
+		//}
 
 		out, err := insertErrors(src)
 		if err != nil {
-			t.Fatal(err)
+			return
+		}
+
+		if testing.Verbose() {
+			t.Logf("inserted: %q", out)
 		}
 
 		checkErrors2(t, out)
@@ -276,7 +352,7 @@ func TestTesting(t *testing.T) {
 	//src, err := insertErrors("`\n`0") // TODO
 	//src, err := insertErrors("package A; func a(a){defer 0")
 	//src, err := insertErrors(`package A;func _(){defer A.type}`)
-	src, err := insertErrors("package A;/")
+	src, err := insertErrors(" ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -303,12 +379,63 @@ func TestTesting(t *testing.T) {
 // Inserts following ERROR comments:
 // - /*ERROR msg*/ - position of the previous token
 // - /*ERROR +1 msg*/ - position of the previous token plus the specified offset.
-// - /*ERROR AFTER msg*/ - position right after the previous token
-// - /*ERROR HERE msg*/ - end of comment
+// - /*ERROR AFTER msg*/ - end of comment
+// - /*ERROR HERE msg*/ - position right after the previous token
 //
 // The input source might already contain ERROR comments, if an error is not
 // reported anymore it will be removed.
-func insertErrors(src string) (string, error) {
+func insertErrors(src string /*, reportErrs func(src string) scanner.ErrorList*/) (string, error) {
+	//if reportErrs == nil {
+	//	reportErrs = func(src string) scanner.ErrorList {
+	//		_, err := ParseFile(token.NewFileSet(), "", src, SkipObjectResolution|ParseComments|AllErrors)
+	//		errs, _ := err.(scanner.ErrorList)
+	//		return errs
+	//	}
+	//}
+
+	// Check run, make sure that the source can be tokenized without any error.
+	{
+		// It is not possible to calculate the position of the end token reliabely.
+		// See https://go.dev/issue/74958
+		if strings.ContainsRune(src, '\r') {
+			return "", fmt.Errorf(`insertErrors: not able to handle source code with "\r"`)
+		}
+
+		var scanErr error
+		file := token.NewFileSet().AddFile("", -1, len(src))
+		var s scanner.Scanner
+		s.Init(file, []byte(src), func(pos token.Position, msg string) {
+			if scanErr == nil {
+				scanErr = &scanner.Error{
+					Pos: pos,
+					Msg: msg,
+				}
+			}
+		}, scanner.ScanComments)
+
+		for {
+			_, tok, lit := s.Scan()
+			if tok == token.EOF {
+				break
+			}
+
+			// TODO: try to handle them.
+			if tok == token.COMMENT && (strings.HasPrefix(lit, "//") || strings.Contains(lit, "\n")) {
+				return "", fmt.Errorf("insertErrors: not able to handle comment: %q", lit)
+			}
+
+			// TODO: maybe enforce that on the error messages instead?
+			// TODO: we could somehow escape such "/*" in errors?
+			if tok == token.STRING && strings.Contains(lit, "*/") {
+				return "", fmt.Errorf(`insertErrors: not able to handle string literals containing "/*": %q`, lit)
+			}
+		}
+
+		if scanErr != nil {
+			return "", scanErr
+		}
+	}
+
 	// Remove existing ERROR comments.
 	{
 		file := token.NewFileSet().AddFile("", -1, len(src))
@@ -348,6 +475,12 @@ func insertErrors(src string) (string, error) {
 		src = out.String()
 	}
 
+	// Remove BOM (if exists).
+	r, size := utf8.DecodeRuneInString(src)
+	if r == '\ufeff' {
+		src = src[size:]
+	}
+
 	// Insert a space before every token.
 	// TODO: explain why.
 	{
@@ -381,9 +514,11 @@ func insertErrors(src string) (string, error) {
 
 	// Parse file and insert ERROR comments.
 	{
-		fset := token.NewFileSet()
-		_, err := ParseFile(fset, "", src, SkipObjectResolution|ParseComments|AllErrors)
+		_, err := ParseFile(token.NewFileSet(), "", src, SkipObjectResolution|ParseComments|AllErrors)
 		errs, _ := err.(scanner.ErrorList)
+		if !sort.IsSorted(errs) {
+			return "", fmt.Errorf("insertErrors: unsorted list")
+		}
 
 		file := token.NewFileSet().AddFile("", -1, len(src))
 		var s scanner.Scanner
@@ -397,67 +532,57 @@ func insertErrors(src string) (string, error) {
 		var prev int // position of last non-comment, non-semicolon token
 		var here int // position immediately after the token at position prev
 
-		prevTok := token.ILLEGAL
+		nextSpace := false
 		for {
 			pos, tok, lit := s.Scan()
 			off := file.Offset(pos)
+
+			// Write entirely the previous token.
+			out.WriteString(src[lastOff:min(here, len(src))])
+			lastOff = min(here, len(src))
+
 			for len(errs) != 0 {
 				errOff := errs[0].Pos.Offset
 				errMsg := errs[0].Msg
-				if (tok == token.EOF || (tok == token.SEMICOLON && lit == "\n" && off == len(src))) && off == errOff {
-					out.WriteString(src[lastOff:errOff])
-					if prevTok == token.QUO {
+
+				if (tok == token.EOF || (tok == token.SEMICOLON && lit == "\n")) && off == errOff {
+					out.WriteString(src[lastOff : off-1]) // insert until off, but keep the fake space directly before EOF/EOL.
+					lastOff = off - 1
+
+					if nextSpace {
 						out.WriteString(" ")
-						prevTok = token.ILLEGAL
+						nextSpace = false
 					}
 					out.WriteString("/*ERROR AFTER ")
 					out.WriteString(strconv.Quote(errMsg))
 					out.WriteString("*/")
-					lastOff = errOff
 					errs = errs[1:]
 				} else if errOff == prev {
-					out.WriteString(src[lastOff:here])
-					if prevTok == token.QUO {
+					if nextSpace {
 						out.WriteString(" ")
-						prevTok = token.ILLEGAL
+						nextSpace = false
 					}
 					out.WriteString("/*ERROR ")
 					out.WriteString(strconv.Quote(errMsg))
 					out.WriteString("*/")
-					lastOff = here
 					errs = errs[1:]
 				} else if errOff == here {
-					out.WriteString(src[lastOff:errOff])
-					if prevTok == token.QUO {
+					if nextSpace {
 						out.WriteString(" ")
-						prevTok = token.ILLEGAL
+						nextSpace = false
 					}
 					out.WriteString("/*ERROR HERE ")
 					out.WriteString(strconv.Quote(errMsg))
 					out.WriteString("*/")
-					out.WriteString(src[errOff:off])
-					lastOff = off
-					errs = errs[1:]
-				} else if errOff > here && errOff < off {
-					out.WriteString(src[lastOff:errOff])
-					if prevTok == token.QUO {
-						out.WriteString(" ")
-						prevTok = token.ILLEGAL
-					}
-					out.WriteString("/*ERROR AFTER ")
-					out.WriteString(strconv.Quote(errMsg))
-					out.WriteString("*/")
-					lastOff = errOff
 					errs = errs[1:]
 				} else if errOff > prev && errOff < here {
 					// It would be nice if the parse did not produce such
 					// errors where the position is in the middle of a token.
 					// Currently it might produce such errors, for example:
 					//	func _(){defer A.type}
-					out.WriteString(src[lastOff:here])
-					if prevTok == token.QUO {
+					if nextSpace {
 						out.WriteString(" ")
-						prevTok = token.ILLEGAL
+						nextSpace = false
 					}
 					out.WriteString("/*ERROR ")
 					out.WriteString("+")
@@ -465,11 +590,11 @@ func insertErrors(src string) (string, error) {
 					out.WriteString(" ")
 					out.WriteString(strconv.Quote(errMsg))
 					out.WriteString("*/")
-					lastOff = here
 					errs = errs[1:]
 				} else if errOff >= off {
 					break // We will place this error next time.
 				} else {
+					// TODO: return as error, since this can be caused by a parser.
 					panic("unreachable")
 				}
 			}
@@ -481,14 +606,15 @@ func insertErrors(src string) (string, error) {
 			}
 			here = prev + tokLength
 
-			prevTok = tok
+			nextSpace = tok == token.QUO
+
 			if tok == token.EOF {
 				break
 			}
 		}
 
 		if len(errs) != 0 {
-			return "", fmt.Errorf("insertErrors: non-inserted errors left")
+			panic("unreachable")
 		}
 
 		out.WriteString(src[lastOff:])
@@ -518,53 +644,8 @@ func insertErrors(src string) (string, error) {
 			out.WriteString(src[lastOff : off-1])
 			lastOff = off
 		}
-		out.WriteString(src[lastOff:])
+		out.WriteString(src[lastOff : len(src)-1]) // remove space before EOF
 		src = out.String()
-	}
-
-	// Another artificial space removal run, to remove the last space (before EOF).
-	// We handle it specially, because when ERROR comments are inserted, the fake
-	// space we inserted at EOF, might be before/in-between ERROR comments.
-	{
-		file := token.NewFileSet().AddFile("", -1, len(src))
-		var s scanner.Scanner
-		s.Init(file, []byte(src), func(pos token.Position, msg string) {
-			panic("unreachable: " + msg)
-		}, scanner.ScanComments)
-
-		lastSpacePos := -1
-		prevEndOff := 0
-		for {
-			pos, tok, lit := s.Scan()
-			off := file.Offset(pos)
-
-			tokLength := len(lit)
-			if !tok.IsLiteral() && tok != token.COMMENT {
-				tokLength = len(tok.String())
-			}
-
-			white := src[prevEndOff:off]
-			for _, c := range white {
-				switch c {
-				case ' ', '\t', '\n', '\r', '\ufeff':
-				default:
-					panic("unreachable: " + strconv.QuoteRune(c))
-				}
-			}
-
-			i := strings.LastIndexByte(white, ' ')
-			if i != -1 {
-				lastSpacePos = prevEndOff + i
-			}
-
-			prevEndOff = min(off+tokLength, len(src))
-
-			if tok == token.EOF {
-				break
-			}
-		}
-
-		src = src[:lastSpacePos] + src[lastSpacePos+1:]
 	}
 
 	return src, nil

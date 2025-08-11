@@ -1,9 +1,8 @@
 package main
 
-func _() {
-	var
-}/*ERROR "expected 'IDENT', found '}'"*/
-/*ERROR "expected type, found newline"*//*ERROR AFTER "expected ';', found 'EOF'"*//*ERROR AFTER "expected '}', found 'EOF'"*/======
+var _ = []int{
+	0/*ERROR AFTER "missing ',' before newline in composite literal"*/
+/*ERROR AFTER "expected ';', found 'EOF'"*//*ERROR AFTER "expected '}', found 'EOF'"*/======
 *ast.File {
    Doc: nil
    Package: 1:1
@@ -13,85 +12,73 @@ func _() {
       Obj: nil
    }
    Decls: []ast.Decl (len = 1) {
-      0: *ast.FuncDecl {
+      0: *ast.GenDecl {
          Doc: nil
-         Recv: nil
-         Name: *ast.Ident {
-            NamePos: 3:6
-            Name: "_"
-            Obj: nil
-         }
-         Type: *ast.FuncType {
-            Func: 3:1
-            TypeParams: nil
-            Params: *ast.FieldList {
-               Opening: 3:7
-               List: nil
-               Closing: 3:8
-            }
-            Results: nil
-         }
-         Body: *ast.BlockStmt {
-            Lbrace: 3:10
-            List: []ast.Stmt (len = 1) {
-               0: *ast.DeclStmt {
-                  Decl: *ast.GenDecl {
-                     Doc: nil
-                     TokPos: 4:2
-                     Tok: var
-                     Lparen: -
-                     Specs: []ast.Spec (len = 1) {
-                        0: *ast.ValueSpec {
-                           Doc: nil
-                           Names: []*ast.Ident (len = 1) {
-                              0: *ast.Ident {
-                                 NamePos: 5:1
-                                 Name: "_"
-                                 Obj: nil
-                              }
-                           }
-                           Type: *ast.BadExpr {
-                              From: 5:41
-                              To: 5:41
-                           }
-                           Values: nil
-                           Comment: *ast.CommentGroup {
-                              List: []*ast.Comment (len = 1) {
-                                 0: *ast.Comment {
-                                    Slash: 5:2
-                                    Text: "/*ERROR \"expected 'IDENT', found '}'\"*/"
-                                 }
-                              }
-                           }
-                        }
-                     }
-                     Rparen: -
+         TokPos: 3:1
+         Tok: var
+         Lparen: -
+         Specs: []ast.Spec (len = 1) {
+            0: *ast.ValueSpec {
+               Doc: nil
+               Names: []*ast.Ident (len = 1) {
+                  0: *ast.Ident {
+                     NamePos: 3:5
+                     Name: "_"
+                     Obj: nil
                   }
                }
+               Type: nil
+               Values: []ast.Expr (len = 1) {
+                  0: *ast.CompositeLit {
+                     Type: *ast.ArrayType {
+                        Lbrack: 3:9
+                        Len: nil
+                        Elt: *ast.Ident {
+                           NamePos: 3:11
+                           Name: "int"
+                           Obj: nil
+                        }
+                     }
+                     Lbrace: 3:14
+                     Elts: []ast.Expr (len = 1) {
+                        0: *ast.BasicLit {
+                           ValuePos: 4:2
+                           Kind: INT
+                           Value: "0"
+                        }
+                     }
+                     Rbrace: 5:87
+                     Incomplete: false
+                  }
+               }
+               Comment: nil
             }
-            Rbrace: -
          }
+         Rparen: -
       }
    }
    FileStart: 1:1
-   FileEnd: 6:127
+   FileEnd: 5:87
    Scope: nil
    Imports: nil
    Unresolved: nil
    Comments: []*ast.CommentGroup (len = 2) {
-      0: *(obj @ 51)
-      1: *ast.CommentGroup {
-         List: []*ast.Comment (len = 3) {
+      0: *ast.CommentGroup {
+         List: []*ast.Comment (len = 1) {
             0: *ast.Comment {
-               Slash: 6:1
-               Text: "/*ERROR \"expected type, found newline\"*/"
+               Slash: 4:3
+               Text: "/*ERROR AFTER \"missing ',' before newline in composite literal\"*/"
             }
-            1: *ast.Comment {
-               Slash: 6:41
+         }
+      }
+      1: *ast.CommentGroup {
+         List: []*ast.Comment (len = 2) {
+            0: *ast.Comment {
+               Slash: 5:1
                Text: "/*ERROR AFTER \"expected ';', found 'EOF'\"*/"
             }
-            2: *ast.Comment {
-               Slash: 6:84
+            1: *ast.Comment {
+               Slash: 5:44
                Text: "/*ERROR AFTER \"expected '}', found 'EOF'\"*/"
             }
          }
